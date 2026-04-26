@@ -175,14 +175,14 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Implement Google Drive sync transport in the `play` product flavor.
 
-- [ ] Add `playImplementation` dependencies: `google-api-services-drive`, `google-api-client-android`, `google-oauth-client-jetty`, `play-services-auth`
-- [ ] Create `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` (Java):
+- [x] Add `playImplementation` dependencies: `google-api-services-drive`, `google-api-client-android`, `google-http-client-gson`, `play-services-auth`
+- [x] Create `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` (Java):
   - Google Sign-In with `DriveScopes.DRIVE_APPDATA`
   - Upload: export JSON blob → create/update `.dispensa_sync_changes.json` in `appDataFolder`
   - Download: fetch `.dispensa_sync_changes.json` → import via `SyncManager`
   - Error handling: 401 re-auth, 404 first-sync empty treatment, 429/5xx exponential backoff (max 3 retries)
-- [ ] Integrate `GoogleDriveSyncTransport` into `SyncWorker` for `play` flavor
-- [ ] Write unit tests for upload/download logic (mock Drive client)
+- [x] Integrate `GoogleDriveSyncTransport` into `SyncWorker` for `play` flavor
+- [x] Write unit tests for upload/download logic (mock Drive client)
 
 **Tests:** JUnit 4; manual Play flavor verification.
 

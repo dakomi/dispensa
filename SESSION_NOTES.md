@@ -387,3 +387,97 @@ Build command requires: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew t
 - `SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED = "sync_local_network_enabled"` — use this key in Session 6 Settings UI.
 - `SyncWorkerScheduler.PERIODIC_WORK_TAG = "periodicSyncWork"` / `MANUAL_WORK_TAG = "MANUAL_SYNC"`.
 - `SyncWorker.DISCOVERY_WAIT_MS = 5000` — NSD discovery wait before pushing.
+
+---
+
+## Session 5 — Google Drive Transport (`play` flavor)
+
+**Date:** 2026-04-26  
+**Goal:** Implement `GoogleDriveSyncTransport` in the `play` product flavor and integrate it into `SyncWorker`.
+
+### What was done
+
+- Added four `playImplementation` dependencies to `libs.versions.toml` and `app/build.gradle.kts`:
+  - `com.google.android.gms:play-services-auth:21.3.0` — Google Sign-In
+  - `com.google.api-client:google-api-client-android:2.7.0` — Android HTTP transport + `GoogleAccountCredential`
+  - `com.google.apis:google-api-services-drive:v3-rev20240730-2.0.0` — Drive REST API v3
+  - `com.google.http-client:google-http-client-gson:1.46.0` — `GsonFactory` for JSON
+- Created `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java`:
+  - Implements `SyncTransport`; stores one file (`.dispensa_sync_changes.json`) in Drive `appDataFolder`.
+  - `push(data, callback)`: downloads existing Drive file, uploads `data` to replace it, returns downloaded bytes via callback so `SyncWorker` can import peer changes.
+  - `pull(callback)`: downloads Drive file and returns contents.
+  - Error handling: HTTP 401 → `AuthException`; HTTP 404 → `null` (first-sync empty); HTTP 429/5xx → exponential backoff, up to `MAX_RETRIES = 3`.
+  - Inner `DriveOperations` interface (package-private) wraps all Drive API calls for test injection; `RealDriveOperations` is the production implementation.
+  - `backoffBaseMs` is set to `0` in the test constructor for instant retries; `1000` in production.
+- Created `app/src/play/java/eu/frigo/dispensa/sync/DriveTransportFactory.java`:
+  - `create(context, syncManager)` checks `sync_drive_enabled` pref and `GoogleSignIn.getLastSignedInAccount()`; returns `GoogleDriveSyncTransport` or `null`.
+- Created `app/src/fdroid/java/eu/frigo/dispensa/sync/DriveTransportFactory.java`:
+  - `create(context, syncManager)` always returns `null` — Drive sync is not available in the F-Droid flavor.
+- Updated `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java`:
+  - After the local-network sync cycle, calls `DriveTransportFactory.create(ctx, syncManager)`.
+  - If non-null, runs a full push/pull cycle (same pattern as local-network): exports changes, pushes to Drive, awaits callback, imports any downloaded peer blob, persists max sync clock.
+- Created `app/src/testPlay/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransportTest.java` (16 JUnit 4 tests):
+  - `push_downloadsBeforeUploading` — verifies download-then-upload ordering via `InOrder`
+  - `push_returnsDownloadedContentViaCallback` — happy-path callback verification
+  - `push_returnsNull_whenNoExistingDriveFile` — first-sync 404 treatment
+  - `push_stillUploads_whenRemoteBlobIsNull` — upload still happens on 404
+  - `push_callsOnError_whenDownloadThrowsIoException` — network error propagation
+  - `push_callsOnError_withAuthException_on401` — auth error type
+  - `push_retriesUpload_onTransientError_thenSucceeds` — 503 × 2 then success
+  - `push_retriesUpload_on429RateLimitError_thenSucceeds` — 429 then success
+  - `push_failsAfterMaxRetries_onPersistentTransientError` — exhausted retries
+  - `push_doesNotRetry_on4xxClientError` — 400 not retried
+  - `pull_returnsDownloadedContent` — basic pull
+  - `pull_returnsNull_whenNoFileExists` — 404 treatment for pull
+  - `pull_callsOnError_onIoException` — I/O error propagation
+  - `pull_callsOnError_withAuthException_on401` — auth error for pull
+  - `driveFileName_hasLeadingDot` — constant validation
+  - `appDataFolder_isCorrectValue` — constant validation
+
+### Files changed
+
+- `gradle/libs.versions.toml` — added `playServicesAuth`, `googleApiClientAndroid`, `googleApiServicesDrive`, `googleHttpClientGson` version entries and library entries
+- `app/build.gradle.kts` — added 4 `playImplementation` dependencies
+- `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` — new class
+- `app/src/play/java/eu/frigo/dispensa/sync/DriveTransportFactory.java` — new class (play flavor)
+- `app/src/fdroid/java/eu/frigo/dispensa/sync/DriveTransportFactory.java` — new class (fdroid no-op)
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — added Drive sync cycle
+- `app/src/testPlay/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransportTest.java` — new 16-test file
+- `PLAN.md` — Session 5 tasks marked complete
+
+### Test results
+
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all 29 fdroid unit tests pass (unchanged from Session 4).
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all 45 play unit tests pass (29 pre-existing + 16 new `GoogleDriveSyncTransportTest`).
+
+### Handoff to Session 6
+
+**Next session goal:** Surface sync controls in the existing Settings screen.
+
+**Specific tasks:**
+1. Add preference XML entries to the existing preferences XML file:
+   - `sync_local_network_enabled` — `CheckBoxPreference` (default: false, both flavors)
+   - `sync_drive_enabled` — `CheckBoxPreference` (play flavor only, default: false)
+   - `sync_drive_account` — read-only summary + "Sign Out" button (play flavor only)
+   - `sync_last_timestamp` — read-only summary of last sync time
+   - `sync_trigger_manual` — `Preference` button → triggers one-shot `SyncWorker`
+2. Update `SettingsFragment.java` to:
+   - React to `sync_local_network_enabled` toggle: call `SyncWorkerScheduler.schedulePeriodicSync` or `cancelPeriodicSync`.
+   - React to `sync_trigger_manual` click: call `SyncWorkerScheduler.triggerManualSync(ctx)`.
+   - React to `sync_drive_enabled` toggle (play flavor): initiate Google Sign-In flow if enabling.
+3. Possibly update `Dispensa.java` to also react to `sync_drive_enabled` preference.
+4. Add string resources (en + it).
+5. Write Espresso test confirming preferences are displayed.
+
+**Key constraints to carry forward:**
+- All new source code must be **Java** (not Kotlin).
+- No Google dependency outside `playImplementation`.
+- Drive-specific preference entries (sign-in, account display) must be in `play`-flavor resources only.
+- Build: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew assembleFdroidDebug`
+- Tests: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest`
+
+**Conventions established this session:**
+- `DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED = "sync_drive_enabled"` — the preference key for Drive sync (use this in Session 6 Settings UI).
+- `GoogleDriveSyncTransport.DRIVE_FILE_NAME = ".dispensa_sync_changes.json"` — Drive appDataFolder file.
+- `GoogleDriveSyncTransport.MAX_RETRIES = 3` — max retry attempts for transient errors.
+- `DriveTransportFactory` exists in BOTH `play/` and `fdroid/` flavor source sets with identical signatures — `SyncWorker` in `main/` safely calls it without knowing about flavor-specific implementations.

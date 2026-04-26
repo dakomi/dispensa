@@ -15,9 +15,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import eu.frigo.dispensa.data.AppDatabase;
+import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
 import eu.frigo.dispensa.sync.SyncCallback;
 import eu.frigo.dispensa.sync.SyncManager;
+import eu.frigo.dispensa.sync.SyncTransport;
 
 /**
  * WorkManager {@link Worker} that performs a full local-network sync cycle.
@@ -115,6 +117,46 @@ public class SyncWorker extends Worker {
                 Log.d(TAG, "Sync complete — imported peer changes.");
             } else {
                 Log.d(TAG, "Sync complete — no peers found or no peer changes.");
+            }
+
+            // Drive sync (play flavor: syncs via appDataFolder when enabled and signed-in;
+            // fdroid flavor: DriveTransportFactory.create() always returns null — no-op).
+            SyncTransport driveTransport = DriveTransportFactory.create(ctx, syncManager);
+            if (driveTransport != null) {
+                byte[] driveExport = syncManager.exportChanges(syncManager.getLastSyncVersion());
+
+                CountDownLatch driveLatch = new CountDownLatch(1);
+                AtomicReference<byte[]> driveBlobRef = new AtomicReference<>();
+
+                driveTransport.push(driveExport, new SyncCallback() {
+                    @Override
+                    public void onSuccess(byte[] data) {
+                        driveBlobRef.set(data);
+                        driveLatch.countDown();
+                    }
+
+                    @Override
+                    public void onError(Exception error) {
+                        Log.w(TAG, "Drive sync push error", error);
+                        driveLatch.countDown();
+                    }
+                });
+
+                boolean driveCompleted = driveLatch.await(EXCHANGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                if (!driveCompleted) {
+                    Log.w(TAG, "Drive sync timed out after " + EXCHANGE_TIMEOUT_SECONDS + "s");
+                }
+
+                byte[] driveBlob = driveBlobRef.get();
+                if (driveBlob != null) {
+                    long maxClockBeforeDriveImport = syncManager.getMaxSyncClock();
+                    syncManager.importChanges(driveBlob);
+                    syncManager.persistLastSyncVersion(
+                            Math.max(maxClockBeforeDriveImport, syncManager.getMaxSyncClock()));
+                    Log.d(TAG, "Drive sync complete — imported changes from Drive.");
+                } else {
+                    Log.d(TAG, "Drive sync complete — no changes from Drive.");
+                }
             }
 
         } catch (IOException e) {
