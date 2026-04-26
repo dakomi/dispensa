@@ -601,3 +601,32 @@ All 7 sessions are done. The CRDT sync feature is fully implemented:
 - **Session 5** — `GoogleDriveSyncTransport` (play flavor)
 - **Session 6** — Settings UI (`SyncSettingsHelper`, preferences XML, string resources)
 - **Session 7** — ProGuard rules, release builds, lint, README ✅
+
+---
+
+## Session 8 — Release v0.1.9.1
+
+**Date:** 2026-04-26  
+**Goal:** Bump version to 0.1.9.1 and publish fdroid + play release APKs via a GitHub Actions workflow.
+
+### What was done
+
+- Bumped `versionCode` to `20` and `versionName` to `"0.1.9.1"` in `app/build.gradle.kts`.
+- Added a `signingConfigs.release` block to `app/build.gradle.kts` that reads signing credentials from env vars (`KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`); the release build type is now wired to this config.
+- Created `.github/workflows/release.yml`: triggered by `workflow_dispatch` (with a `tag` input defaulting to `v0.1.9.1`) or a `v*` tag push.  The workflow decodes a base64 keystore from `KEYSTORE_BASE64` secret, builds both `assembleFdroidRelease` and `assemblePlayRelease`, renames the APKs to `dispensa-<tag>-fdroid.apk` / `dispensa-<tag>-play.apk`, then creates a GitHub release with both APKs attached.
+
+### Files changed
+
+- `app/build.gradle.kts` — version bump + release signing config
+- `.github/workflows/release.yml` — new release CI workflow
+
+### Test results
+
+Compilation / lint verified via `./gradlew :app:compileFdroidDebugJavaWithJavac` (no new errors).  Full unit-test run not repeated as no logic changed.
+
+### Handoff
+
+To trigger the release:
+1. Set the four repository secrets: `KEYSTORE_BASE64` (base64-encoded `.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+2. Go to **Actions → Release → Run workflow** and enter `v0.1.9.1` as the tag.  
+   Alternatively push a `v0.1.9.1` tag: `git tag v0.1.9.1 && git push origin v0.1.9.1`.
