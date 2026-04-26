@@ -554,3 +554,50 @@ Build command requires: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew t
 - Last-sync epoch is stored in `SharedPreferences` under key `sync_last_epoch_ms` (milliseconds since epoch). Session 7 can write this key after a successful sync in `SyncWorker` if desired.
 - `SyncSettingsHelper.setup(fragment)` must be called **after** `setPreferencesFromResource()` in `onCreatePreferences` so that `pref_cat_sync` already exists when the Drive prefs are injected.
 - `SyncSettingsHelper.refreshAccountSummary(fragment)` must be called in `onResume` to keep the account display current after sign-in flows return to the Settings screen.
+
+---
+
+## Session 7 — ProGuard & Final Integration
+
+**Date:** 2026-04-26  
+**Goal:** Add ProGuard / R8 keep rules for the sync package, run full release builds on both flavors, run lint, and update the README with a sync feature section.
+
+### What was done
+
+- Added to `app/proguard-rules.pro`:
+  - `-keep class eu.frigo.dispensa.sync.** { *; }` — preserves all sync infrastructure (transport, manager, DTOs, worker) from R8 class/method renaming.
+  - `-keepclassmembers class eu.frigo.dispensa.sync.SyncChange { *; }` — field names (`tbl`, `pkVal`, `op`, `rowJson`, `clock`, `deviceId`) must survive R8 for Gson round-trips.
+  - `-keepclassmembers class eu.frigo.dispensa.sync.SyncBlob { *; }` — field names (`version`, `changes`) must survive R8.
+- Fixed Play release build failure: two Google auth JARs (`google-auth-library-oauth2-http`, `google-auth-library-credentials`) both contain `META-INF/INDEX.LIST` and `META-INF/DEPENDENCIES`. Added a `packaging { resources { excludes += ... } }` block to `app/build.gradle.kts` to suppress the duplicate-resource error.
+- Ran `./gradlew assembleFdroidRelease` — **BUILD SUCCESSFUL**.
+- Ran `./gradlew assemblePlayRelease` — **BUILD SUCCESSFUL** after adding the packaging exclusion.
+- Ran `./gradlew lintFdroidDebug` — all lint findings are **pre-existing** (themes.xml API-level warning, deprecated `commit()` in LocaleHelper/SettingsFragment, DefaultLocale warnings, and dependency-version advisories). No new issues introduced by this project's sync feature.
+- Ran `./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all 29 fdroid + 45 play unit tests pass (unchanged from Session 6).
+- Updated `README.md` with a **"🔄 Sync"** section describing how the feature works, the two transports, background scheduling, and an ASCII architecture diagram.
+- Marked all Session 7 tasks complete in `PLAN.md`.
+
+### Files changed
+
+- `app/proguard-rules.pro` — added sync-package keep rules and `SyncChange`/`SyncBlob` member-keep rules
+- `app/build.gradle.kts` — added `packaging { resources { excludes } }` to fix Play release META-INF conflict
+- `README.md` — added Sync section
+- `PLAN.md` — Session 7 tasks marked complete
+- `SESSION_NOTES.md` — this section added
+
+### Test results
+
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — 29 fdroid + 45 play unit tests pass.
+- `./gradlew assembleFdroidRelease` — **BUILD SUCCESSFUL** (R8/ProGuard clean).
+- `./gradlew assemblePlayRelease` — **BUILD SUCCESSFUL** (R8/ProGuard clean after META-INF exclusion).
+- Lint: no new errors or warnings introduced by this session's changes.
+
+### Project complete
+
+All 7 sessions are done. The CRDT sync feature is fully implemented:
+- **Session 1** — Planning & bootstrap
+- **Session 2** — Network permissions + DB migration to v10
+- **Session 3** — `SyncManager` + trigger-based CRDT change log
+- **Session 4** — `LocalNetworkSyncTransport` (mDNS + TCP) + `SyncWorker`
+- **Session 5** — `GoogleDriveSyncTransport` (play flavor)
+- **Session 6** — Settings UI (`SyncSettingsHelper`, preferences XML, string resources)
+- **Session 7** — ProGuard rules, release builds, lint, README ✅

@@ -123,7 +123,13 @@ public class SyncWorker extends Worker {
             // fdroid flavor: DriveTransportFactory.create() always returns null — no-op).
             SyncTransport driveTransport = DriveTransportFactory.create(ctx, syncManager);
             if (driveTransport != null) {
-                byte[] driveExport = syncManager.exportChanges(syncManager.getLastSyncVersion());
+                // Always export the full change log (clock > 0) for Drive.
+                // Drive acts as a canonical snapshot store: any device — including one that
+                // has never done a local-network sync — must be able to bootstrap from it.
+                // Using getLastSyncVersion() here would produce an empty export whenever a
+                // local-network sync had just run (which updates lastSyncVersion to the current
+                // max clock), so changes would never reach Drive-only peers.
+                byte[] driveExport = syncManager.exportChanges(0L);
 
                 CountDownLatch driveLatch = new CountDownLatch(1);
                 AtomicReference<byte[]> driveBlobRef = new AtomicReference<>();

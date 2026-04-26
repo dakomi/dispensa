@@ -65,6 +65,9 @@ android {
         jniLibs {
             useLegacyPackaging = false
         }
+        resources {
+            excludes += setOf("META-INF/INDEX.LIST", "META-INF/DEPENDENCIES")
+        }
     }
     room {
         schemaDirectory("$projectDir/schemas")

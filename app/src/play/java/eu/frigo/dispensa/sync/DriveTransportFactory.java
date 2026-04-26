@@ -40,6 +40,6 @@ public class DriveTransportFactory {
         GoogleSignInAccount signInAccount = GoogleSignIn.getLastSignedInAccount(context);
         if (signInAccount == null || signInAccount.getAccount() == null) return null;
 
-        return new GoogleDriveSyncTransport(context, signInAccount.getAccount(), syncManager);
+        return new GoogleDriveSyncTransport(context, signInAccount.getAccount());
     }
 }
