@@ -47,6 +47,7 @@ googleMaterialTypefaceVersion = "3.0.1.4.original-kotlin"
 iconicsViewsVersion = "4.0.2"
 balloon = "1.7.5"
 crsqlite = "0.1.0-alpha04"
+mockito = "5.11.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -95,6 +96,7 @@ mikepenz-iconics-views = { group = "com.mikepenz", name = "iconics-views", versi
 balloon = { group = "com.github.skydoves", name = "balloon", version.ref = "balloon" }
 crsqlite-android = { group = "io.vlcn", name = "crsqlite-android", version.ref = "crsqlite" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "roomRuntime" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

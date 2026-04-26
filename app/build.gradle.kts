@@ -108,9 +108,14 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.balloon)
-    implementation(libs.crsqlite.android)
+    // io.vlcn:crsqlite-android is not yet published to a public Maven repository.
+    // A compile-time stub (CrSqliteOpenHelperFactory.java) is included in the source tree
+    // under io/vlcn/crsqlite/ so that AppDatabase compiles without changes.
+    // Uncomment the line below and remove the stub when the real artifact becomes available:
+    // implementation(libs.crsqlite.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.room.testing)
