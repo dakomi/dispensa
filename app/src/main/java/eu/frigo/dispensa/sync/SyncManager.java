@@ -32,6 +32,15 @@ public class SyncManager {
 
     static final String PREFS_KEY_LAST_SYNC_VERSION = "last_sync_version";
 
+    private static final String EXPORT_CHANGES_SQL =
+            "SELECT \"table\", pk, cid, val, col_version, db_version, site_id, cl, seq"
+                    + " FROM crsql_changes WHERE db_version > ?";
+
+    private static final String IMPORT_CHANGE_SQL =
+            "INSERT INTO crsql_changes"
+                    + " (\"table\", pk, cid, val, col_version, db_version, site_id, cl, seq)"
+                    + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
     private final SupportSQLiteDatabase db;
     private final SharedPreferences prefs;
     private final Gson gson;
@@ -62,8 +71,7 @@ public class SyncManager {
      * @return UTF-8 encoded JSON blob suitable for passing to {@link SyncTransport#push}
      */
     public byte[] exportChanges(long lastSyncVersion) {
-        String sql = "SELECT \"table\", pk, cid, val, col_version, db_version, site_id, cl, seq"
-                + " FROM crsql_changes WHERE db_version > ?";
+        String sql = EXPORT_CHANGES_SQL;
         List<SyncChange> changes = new ArrayList<>();
 
         try (Cursor cursor = db.query(sql, new Object[]{lastSyncVersion})) {
@@ -103,10 +111,7 @@ public class SyncManager {
         for (SyncChange change : blob.changes) {
             byte[] siteIdBytes = change.siteId != null
                     ? Base64.getDecoder().decode(change.siteId) : null;
-            db.execSQL(
-                    "INSERT INTO crsql_changes"
-                            + " (\"table\", pk, cid, val, col_version, db_version, site_id, cl, seq)"
-                            + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            db.execSQL(IMPORT_CHANGE_SQL,
                     new Object[]{
                             change.table, change.pk, change.cid, change.val,
                             change.colVersion, change.dbVersion, siteIdBytes,

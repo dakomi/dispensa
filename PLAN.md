@@ -124,14 +124,14 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Implement `SyncManager` and the `SyncTransport` / `SyncCallback` interfaces.
 
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncTransport.java` (interface)
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncCallback.java` (interface)
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java`:
+- [x] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncTransport.java` (interface)
+- [x] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncCallback.java` (interface)
+- [x] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java`:
   - `exportChanges(long lastSyncVersion)` → JSON blob (`byte[]`)
   - `importChanges(byte[] blob)` → apply via `INSERT INTO crsql_changes`
   - `getLastSyncVersion()` / `persistLastSyncVersion(long version)` via `SharedPreferences`
   - Bootstrap path: `lastSyncVersion == 0` exports full change log (`db_version > 0`)
-- [ ] Write JUnit 4 unit tests for `SyncManager` serialisation round-trip (mock `SupportSQLiteDatabase`)
+- [x] Write JUnit 4 unit tests for `SyncManager` serialisation round-trip (mock `SupportSQLiteDatabase`)
 
 **Tests:** JUnit 4 in `app/src/test/`.
 
