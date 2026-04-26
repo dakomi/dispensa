@@ -16,13 +16,17 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
 import java.util.Objects;
 
 import eu.frigo.dispensa.R;
 import eu.frigo.dispensa.util.LocaleHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
+import eu.frigo.dispensa.work.SyncWorker;
+import eu.frigo.dispensa.work.SyncWorkerScheduler;
 
 public class SettingsFragment extends PreferenceFragmentCompat implements SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -36,8 +40,16 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     public static final String KEY_OFF_CACHE_TTL_DAYS = "pref_off_cache_ttl_days";
     public static final String KEY_OFF_CACHE_CLEAR = "pref_off_cache_clear";
     public static final String KEY_DEFUALT_ICON = "pref_predefined_tab_icon";
+    public static final String KEY_SYNC_LOCAL_NETWORK_ENABLED = SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED;
+    public static final String KEY_SYNC_LAST_TIMESTAMP = "sync_last_timestamp";
+    public static final String KEY_SYNC_TRIGGER_MANUAL = "sync_trigger_manual";
 
+    /** SharedPreferences key where the last-sync epoch-millis is stored. */
+    private static final String PREFS_KEY_LAST_SYNC_EPOCH = "sync_last_epoch_ms";
+
+    private static final String TAG = "SettingsFragment";
     private Preference notificationTimePreference;
+    private Preference syncLastTimestampPreference;
     private ListPreference languagePreference;
 
     @Override
@@ -110,6 +122,24 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 return true;
             });
         }
+
+        // Sync preferences
+        syncLastTimestampPreference = findPreference(KEY_SYNC_LAST_TIMESTAMP);
+        updateLastSyncSummary();
+
+        Preference manualSyncPref = findPreference(KEY_SYNC_TRIGGER_MANUAL);
+        if (manualSyncPref != null) {
+            manualSyncPref.setOnPreferenceClickListener(preference -> {
+                SyncWorkerScheduler.triggerManualSync(requireContext());
+                android.widget.Toast.makeText(requireContext(),
+                        getString(R.string.notify_sync_triggered),
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            });
+        }
+
+        // Inject play-flavor Drive preferences (no-op in fdroid flavor)
+        SyncSettingsHelper.setup(this);
     }
 
     private void clearOpenFoodFactCache() {
@@ -167,11 +197,27 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             notificationTimePreference.setSummary(String.format(Locale.getDefault(), "%02d:%02d", hour, minute));
         }
     }
+
+    private void updateLastSyncSummary() {
+        if (syncLastTimestampPreference == null) return;
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        long epochMs = prefs.getLong(PREFS_KEY_LAST_SYNC_EPOCH, 0L);
+        if (epochMs == 0L) {
+            syncLastTimestampPreference.setSummary(getString(R.string.pref_sync_last_timestamp_never));
+        } else {
+            String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                    .format(new Date(epochMs));
+            syncLastTimestampPreference.setSummary(formatted);
+        }
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         Objects.requireNonNull(getPreferenceManager().getSharedPreferences()).registerOnSharedPreferenceChangeListener(this);
         updateNotificationTimeSummary();
+        updateLastSyncSummary();
+        SyncSettingsHelper.refreshAccountSummary(this);
         if (languagePreference != null) {
             String currentLangValue = PreferenceManager.getDefaultSharedPreferences(requireContext())
                     .getString(KEY_LANGUAGE_PREFERENCE, "en");
@@ -199,6 +245,16 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             editor.commit();
             LocaleHelper.setLocale(context,langCode);
             triggerRebirthWithAlarmManager(context);
+        } else if (KEY_SYNC_LOCAL_NETWORK_ENABLED.equals(key)) {
+            if (context == null) return;
+            boolean enabled = sharedPreferences.getBoolean(key, false);
+            if (enabled) {
+                SyncWorkerScheduler.schedulePeriodicSync(context);
+                Log.d(TAG, "Local network sync enabled — periodic work scheduled.");
+            } else {
+                SyncWorkerScheduler.cancelPeriodicSync(context);
+                Log.d(TAG, "Local network sync disabled — periodic work cancelled.");
+            }
         }
     }
     private void updateLanguagePreferenceSummary(String languageValue) {
