@@ -35,10 +35,15 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = System.getenv("KEYSTORE_PATH")?.let { file(it) }
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            } else {
+                logger.warn("KEYSTORE_PATH not set — release build will be unsigned")
+            }
         }
     }
 

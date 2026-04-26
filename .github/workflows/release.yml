@@ -72,9 +72,9 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.value }}"
           mv app/build/outputs/apk/fdroid/release/*.apk \
-             "app/build/outputs/apk/fdroid/release/dispensa-${TAG}-fdroid.apk" || true
+             "app/build/outputs/apk/fdroid/release/dispensa-${TAG}-fdroid.apk"
           mv app/build/outputs/apk/play/release/*.apk \
-             "app/build/outputs/apk/play/release/dispensa-${TAG}-play.apk" || true
+             "app/build/outputs/apk/play/release/dispensa-${TAG}-play.apk"
 
       - name: Create GitHub release
         env:
