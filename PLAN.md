@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-**Dispensa** is an Android pantry management application (issue [#25](https://github.com/enricofrigo/dispensa/issues/25)). This plan implements **integrated CRDT-based sync** between devices using **CR-SQLite** (`io.vlcn:crsqlite-android`), replacing the original Syncthing suggestion with a built-in solution that requires no external app.
+**Dispensa** is an Android pantry management application (issue [#25](https://github.com/enricofrigo/dispensa/issues/25)). This plan implements **integrated CRDT-based sync** between devices using **SQLite triggers + a change log**, retaining the standard Android SQLite database (no external CRDT library required) while keeping upstream divergence minimal.
 
 - **Package:** `eu.frigo.dispensa`
 - **Languages:** Java (primary), Kotlin (build scripts)
 - **Min SDK:** 26 (Android 8.0) | **Target SDK:** 35
 - **Distribution:** Play Store (`play` flavor) + F-Droid (`fdroid` flavor)
-- **Current DB version:** 9 → will migrate to 10 to enable CRDTs
-- **CRDT library:** CR-SQLite (MIT licensed, F-Droid compatible)
+- **Current DB version:** 9 → migrated to 10 (adds sync infrastructure)
+- **CRDT mechanism:** Application-level Lamport-clock LWW via SQLite triggers + `sync_changes` table (no external dependencies)
 
 ---
 
@@ -17,8 +17,10 @@
 
 | Area | Choice | Rationale |
 |---|---|---|
-| CRDT engine | CR-SQLite (`io.vlcn:crsqlite-android`) | Zero data model changes; works at SQLite layer below Room; MIT licensed; F-Droid compatible |
-| Conflict resolution | CR-SQLite built-in LWW (Lamport clocks) | Per-column last-write-wins is the right semantics for product scalar fields; no custom logic needed |
+| CRDT engine | SQLite triggers + `sync_changes` table (pure SQLite) | No external library needed; zero entity/DAO changes; minimal upstream diff vs. forked repo; works on any Android SQLite (API 26+) |
+| Conflict resolution | Lamport-clock LWW per (table, pk) row | `clock` incremented globally on every write; equal clocks broken by `deviceId` lexicographic comparison; per-row semantics are natural for a pantry app |
+| Import lock | `sync_import_lock` table (single-row flag, checked by WHEN clause in all triggers) | Prevents `INSERT OR REPLACE` during import from re-firing triggers and creating spurious change log entries |
+| Device identity | UUID stored in `SharedPreferences` (`sync_device_id`), added to changes at export time | Stable, zero-permission, no network required |
 | Sync transport abstraction | `SyncTransport` interface | Allows LocalNetwork and GoogleDrive transports to be swapped or extended without modifying `SyncManager` |
 | Local network transport | Android `NsdManager` (mDNS) + TCP sockets | No external dependencies; works on both flavors; no server required |
 | Cloud transport | Google Drive REST API v3 + `appDataFolder` | `play` flavor only; private app folder avoids broad Drive permissions; uses `DriveScopes.DRIVE_APPDATA` |
@@ -59,20 +61,22 @@
                              │
 ┌────────────────────────────▼────────────────────────────────────┐
 │                      Repository Layer                           │
-│  Repository ──► AppDatabase (Room + CrSqliteOpenHelperFactory)  │
+│  Repository ──► AppDatabase (standard Room, no custom factory)  │
 └──────┬─────────────────────────────────────────────────────────┘
        │
 ┌──────▼──────────────────────────────────────────────────────────┐
-│              AppDatabase (SQLite + CR-SQLite extension)         │
-│  crsql_changes virtual table ◄─── MIGRATION_9_10 enables CRDTs │
-│  on: products, categories_definitions,                          │
-│      product_category_links, storage_locations                  │
+│              AppDatabase (standard Android SQLite)              │
+│  MIGRATION_9_10 creates:                                        │
+│    sync_changes (tbl, pk_val, op, row_json, clock) PK(tbl,pk)   │
+│    sync_import_lock (locked)                                    │
+│    12 AFTER INSERT/UPDATE/DELETE triggers on all 4 sync tables  │
+│    → populate sync_changes with Lamport clock automatically     │
 └──────┬──────────────────────────────────────────────────────────┘
        │ exportChanges() / importChanges()
 ┌──────▼──────────────────────────────────────────────────────────┐
-│                     SyncManager (transport-agnostic)            │
-│  - exportChanges(lastVersion) → JSON blob                       │
-│  - importChanges(blob) → INSERT INTO crsql_changes              │
+│                  SyncManager (transport-agnostic)               │
+│  - exportChanges(lastClock) → JSON blob (+ local deviceId)      │
+│  - importChanges(blob) → LWW conflict check → INSERT OR REPLACE │
 │  - persistLastSyncVersion(v) → SharedPreferences                │
 └──────┬──────────────────────────────────────────────────────────┘
        │ SyncTransport interface
@@ -105,35 +109,43 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
-### Session 2 — Dependencies & Database Migration
+### Session 2 — Dependencies & Database Migration ✅
 
-**Goal:** Wire in CR-SQLite and create the Room migration that enables CRDT on the four sync tables.
+**Goal:** Add network permissions and bump database to version 10 with sync infrastructure scaffolding.
 
-- [x] Check CR-SQLite `0.1.0-alpha04` for known vulnerabilities
-- [x] Add `io.vlcn:crsqlite-android:0.1.0-alpha04` to `gradle/libs.versions.toml` and `app/build.gradle.kts`
 - [x] Add `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` permissions to `AndroidManifest.xml`
-- [x] Configure `AppDatabase.java` to use `CrSqliteOpenHelperFactory` and bump `@Database` version to 10
-- [x] Implement `MIGRATION_9_10` calling `crsql_as_crr` on `products`, `categories_definitions`, `product_category_links`, `storage_locations`
-- [x] Verify `fdroid` flavor builds and `./gradlew testFdroidDebugUnitTest` passes
+- [x] Bump `@Database(version = 9)` → `version = 10` in `AppDatabase.java`
+- [x] Create Room schema file for version 10
+- [x] Create `MigrationTest.java` scaffold
+- [x] Add `mockito-core:5.11.0` test dependency
 
-**Tests:** Instrumented migration test (`app/src/androidTest/`) confirming version 9→10 succeeds and `crsql_changes` virtual table is accessible.
+**Tests:** Instrumented migration test (`app/src/androidTest/`) — run on device.
 
 ---
 
-### Session 3 — SyncManager (Transport-Agnostic Core)
+### Session 3 — SyncManager (Transport-Agnostic Core) ✅
 
-**Goal:** Implement `SyncManager` and the `SyncTransport` / `SyncCallback` interfaces.
+**Goal:** Implement `SyncManager` and the `SyncTransport` / `SyncCallback` interfaces using a trigger-based CRDT change log (no external dependencies).
 
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncTransport.java` (interface)
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncCallback.java` (interface)
-- [ ] Create `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java`:
-  - `exportChanges(long lastSyncVersion)` → JSON blob (`byte[]`)
-  - `importChanges(byte[] blob)` → apply via `INSERT INTO crsql_changes`
-  - `getLastSyncVersion()` / `persistLastSyncVersion(long version)` via `SharedPreferences`
-  - Bootstrap path: `lastSyncVersion == 0` exports full change log (`db_version > 0`)
-- [ ] Write JUnit 4 unit tests for `SyncManager` serialisation round-trip (mock `SupportSQLiteDatabase`)
+- [x] Create `SyncTransport.java` (interface)
+- [x] Create `SyncCallback.java` (interface)
+- [x] Create `SyncChange.java` (DTO: tbl, pkVal, op, rowJson, clock, deviceId)
+- [x] Create `SyncBlob.java` (JSON wrapper)
+- [x] Implement `MIGRATION_9_10` in `AppDatabase.java`:
+  - `sync_changes` table (PK = tbl + pk_val; stores Lamport clock + full row as JSON)
+  - `sync_import_lock` table (single-row flag preventing trigger re-fire during import)
+  - 12 AFTER INSERT/UPDATE/DELETE triggers on the 4 sync tables
+- [x] Remove `CrSqliteOpenHelperFactory` stub and `.openHelperFactory()` call from `AppDatabase.java`
+- [x] Remove unused `crsqlite` entries from `libs.versions.toml` and `build.gradle.kts`
+- [x] Implement `SyncManager.java`:
+  - `exportChanges(long lastSyncVersion)` — queries `sync_changes WHERE clock > ?`, appends local deviceId, returns JSON blob
+  - `importChanges(byte[] blob)` — Lamport-clock LWW conflict check, per-table `INSERT OR REPLACE` with import lock
+  - `getLastSyncVersion()` / `persistLastSyncVersion(long)` via `SharedPreferences`
+  - `getLocalDeviceId()` — stable UUID in `SharedPreferences`
+- [x] Write 16 JUnit 4 unit tests in `app/src/test/`
+- [x] Update `MigrationTest.java` to verify `sync_changes`, `sync_import_lock`, and all 12 triggers
 
-**Tests:** JUnit 4 in `app/src/test/`.
+**Tests:** JUnit 4 in `app/src/test/` — **all 16 tests pass**.
 
 ---
 
@@ -145,8 +157,8 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
   - Register/discover Dispensa service via `NsdManager` (service type `_dispensa._tcp`)
   - On discovery: open TCP socket, push/pull JSON blobs via `SyncManager`
   - Handle `CHANGE_WIFI_MULTICAST_STATE` multicast lock
-- [ ] Create `eu.frigo.dispensa.sync.SyncWorker` (WorkManager `Worker`):
-  - Instantiate `LocalNetworkSyncTransport` and call `SyncManager` push/pull
+- [ ] Create `eu.frigo.dispensa.work.SyncWorker` (WorkManager `Worker`):
+  - Instantiate `LocalNetworkSyncTransport` and call `SyncManager` export/import
   - Schedule periodic sync (15-minute minimum interval via `PeriodicWorkRequest`)
   - Support one-shot manual trigger from Settings
 - [ ] Register `SyncWorker` in `Dispensa.java` (application class)
@@ -166,7 +178,7 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
   - Upload: export JSON blob → create/update `.dispensa_sync_changes.json` in `appDataFolder`
   - Download: fetch `.dispensa_sync_changes.json` → import via `SyncManager`
   - Error handling: 401 re-auth, 404 first-sync empty treatment, 429/5xx exponential backoff (max 3 retries)
-- [ ] Integrate `GoogleDriveSyncTransport` into `SyncWorker` for `play` flavor (via build-time selection or injection)
+- [ ] Integrate `GoogleDriveSyncTransport` into `SyncWorker` for `play` flavor
 - [ ] Write unit tests for upload/download logic (mock Drive client)
 
 **Tests:** JUnit 4; manual Play flavor verification.
@@ -177,7 +189,7 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Surface sync controls in the existing Settings screen.
 
-- [ ] Add preference XML entries to `app/src/main/res/xml/` (or existing preferences file):
+- [ ] Add preference XML entries:
   - `sync_local_network_enabled` — CheckBoxPreference (default: false, both flavors)
   - `sync_drive_enabled` — CheckBoxPreference (`play` flavor only, default: false)
   - `sync_drive_account` — read-only + "Sign Out" button (`play` flavor only)
@@ -196,9 +208,8 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 **Goal:** Add ProGuard rules, run full integration validation, update documentation.
 
 - [ ] Add to `app/proguard-rules.pro`:
-  - CR-SQLite native methods keep rule
-  - Google Drive / API client keep rules (stripped automatically in `fdroid` by R8)
   - `eu.frigo.dispensa.sync.**` keep rule
+  - Gson serialization keep rules for `SyncChange` / `SyncBlob`
 - [ ] Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors
 - [ ] Run `./gradlew lint` — fix any new warnings
 - [ ] Run full test suite: `./gradlew testFdroidDebugUnitTest` + `./gradlew testPlayDebugUnitTest`
