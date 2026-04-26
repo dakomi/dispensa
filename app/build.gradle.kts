@@ -108,10 +108,12 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.preference.ktx)
     implementation(libs.balloon)
+    implementation(libs.crsqlite.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.room.testing)
     annotationProcessor(libs.room.compiler)
 
     "fdroidImplementation"(libs.zxing.android.embedded)

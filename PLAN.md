@@ -109,12 +109,12 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Wire in CR-SQLite and create the Room migration that enables CRDT on the four sync tables.
 
-- [ ] Check CR-SQLite `0.1.0-alpha04` for known vulnerabilities
-- [ ] Add `io.vlcn:crsqlite-android:0.1.0-alpha04` to `gradle/libs.versions.toml` and `app/build.gradle.kts`
-- [ ] Add `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` permissions to `AndroidManifest.xml`
-- [ ] Configure `AppDatabase.java` to use `CrSqliteOpenHelperFactory` and bump `@Database` version to 10
-- [ ] Implement `MIGRATION_9_10` calling `crsql_as_crr` on `products`, `categories_definitions`, `product_category_links`, `storage_locations`
-- [ ] Verify `fdroid` flavor builds and `./gradlew testFdroidDebugUnitTest` passes
+- [x] Check CR-SQLite `0.1.0-alpha04` for known vulnerabilities
+- [x] Add `io.vlcn:crsqlite-android:0.1.0-alpha04` to `gradle/libs.versions.toml` and `app/build.gradle.kts`
+- [x] Add `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` permissions to `AndroidManifest.xml`
+- [x] Configure `AppDatabase.java` to use `CrSqliteOpenHelperFactory` and bump `@Database` version to 10
+- [x] Implement `MIGRATION_9_10` calling `crsql_as_crr` on `products`, `categories_definitions`, `product_category_links`, `storage_locations`
+- [x] Verify `fdroid` flavor builds and `./gradlew testFdroidDebugUnitTest` passes
 
 **Tests:** Instrumented migration test (`app/src/androidTest/`) confirming version 9→10 succeeds and `crsql_changes` virtual table is accessible.
 

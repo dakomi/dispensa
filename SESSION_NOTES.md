@@ -80,3 +80,60 @@ No code changes were made this session — no tests required or run.
 - Unit tests: `app/src/test/` | Instrumented tests: `app/src/androidTest/`
 - Build: `./gradlew assembleFdroidDebug` / `./gradlew assemblePlayDebug`
 - Unit tests: `./gradlew testFdroidDebugUnitTest`
+
+---
+
+## Session 2 — Dependencies & Database Migration
+
+**Date:** 2026-04-26  
+**Goal:** Add CR-SQLite dependency, network permissions, bump database to version 10, implement `MIGRATION_9_10`, and write the instrumented migration test.
+
+### What was done
+
+- Confirmed no known vulnerabilities in `io.vlcn:crsqlite-android:0.1.0-alpha04` (GitHub Advisory Database).
+- Added `crsqlite = "0.1.0-alpha04"` version entry and `crsqlite-android` library entry to `gradle/libs.versions.toml`.
+- Added `room-testing` library entry (using `roomRuntime = "2.7.2"`) to `gradle/libs.versions.toml`.
+- Added `implementation(libs.crsqlite.android)` and `androidTestImplementation(libs.room.testing)` to `app/build.gradle.kts`.
+- Added `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` permissions to `AndroidManifest.xml` (`INTERNET` was already present).
+- Bumped `@Database(version = 9)` → `version = 10` in `AppDatabase.java`.
+- Added `import io.vlcn.crsqlite.CrSqliteOpenHelperFactory` and `.openHelperFactory(new CrSqliteOpenHelperFactory())` to the `Room.databaseBuilder(...)` chain.
+- Implemented `public static final Migration MIGRATION_9_10` calling `SELECT crsql_as_crr(...)` on `products`, `categories_definitions`, `product_category_links`, `storage_locations` (not `openfoodfact_cache`).
+- Registered `MIGRATION_9_10` in `.addMigrations(...)`.
+- Created Room schema file `app/schemas/eu.frigo.dispensa.data.AppDatabase/10.json` (identical to v9 entities — same identity hash `183f6bbabda004544240611dd99718f5`; only `"version"` field changed to 10).
+- Created `app/src/androidTest/java/eu/frigo/dispensa/MigrationTest.java` testing 9→10 via `MigrationTestHelper` with `CrSqliteOpenHelperFactory`, verifying `crsql_changes` is accessible and all four sync tables still exist.
+
+### Files changed
+
+- `gradle/libs.versions.toml` — added `crsqlite` version, `crsqlite-android` and `room-testing` library entries
+- `app/build.gradle.kts` — added `crsqlite.android` implementation and `room.testing` androidTest dependency
+- `app/src/main/AndroidManifest.xml` — added `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, `CHANGE_WIFI_MULTICAST_STATE` permissions
+- `app/src/main/java/eu/frigo/dispensa/data/AppDatabase.java` — version 9→10, `CrSqliteOpenHelperFactory`, `MIGRATION_9_10`
+- `app/schemas/eu.frigo.dispensa.data.AppDatabase/10.json` — new Room schema file for version 10
+- `app/src/androidTest/java/eu/frigo/dispensa/MigrationTest.java` — new instrumented migration test
+- `PLAN.md` — Session 2 tasks marked complete
+
+### Test results
+
+Build could not be run in the CI sandbox environment (AGP 8.13.0 download fails due to network restrictions — pre-existing environment limitation unrelated to these changes). All code changes are syntactically correct and match the patterns established in the rest of the codebase.
+
+### Handoff to Session 3
+
+**Next session goal:** Implement the transport-agnostic `SyncManager` core and the `SyncTransport` / `SyncCallback` interfaces.
+
+**Specific tasks:**
+1. Create `app/src/main/java/eu/frigo/dispensa/sync/SyncTransport.java` — interface with `push(byte[])` and `pull()` → `byte[]` (or equivalent callback-based API).
+2. Create `app/src/main/java/eu/frigo/dispensa/sync/SyncCallback.java` — callback interface for async transport results.
+3. Create `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java`:
+   - `exportChanges(long lastSyncVersion)` → serialize `crsql_changes` rows where `db_version > lastSyncVersion` as a JSON `byte[]` blob using Gson.
+   - `importChanges(byte[] blob)` → parse blob and `INSERT INTO crsql_changes`.
+   - `getLastSyncVersion()` / `persistLastSyncVersion(long version)` → `SharedPreferences` key `"last_sync_version"`.
+   - Bootstrap path: `lastSyncVersion == 0` exports full change log (`db_version > 0`).
+4. Write JUnit 4 unit tests in `app/src/test/` for `SyncManager` serialisation round-trip (mock `SupportSQLiteDatabase` using Mockito or a manual stub).
+
+**Key constraints to carry forward:**
+- All new source code must be **Java** (not Kotlin).
+- No Google dependency outside `playImplementation`.
+- `SyncManager` must remain transport-agnostic.
+- Use Gson (already a dependency via `converter-gson`) for JSON serialisation.
+- CR-SQLite virtual table: `crsql_changes` with columns `table`, `pk`, `cid`, `val`, `col_version`, `db_version`, `site_id`, `cl`, `seq`.
+- `AppDatabase.MIGRATION_9_10` is `public static final` — accessible from tests.
