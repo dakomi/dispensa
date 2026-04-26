@@ -47,6 +47,10 @@ googleMaterialTypefaceVersion = "3.0.1.4.original-kotlin"
 iconicsViewsVersion = "4.0.2"
 balloon = "1.7.5"
 mockito = "5.11.0"
+playServicesAuth = "21.3.0"
+googleApiClientAndroid = "2.7.0"
+googleApiServicesDrive = "v3-rev20240730-2.0.0"
+googleHttpClientGson = "1.46.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -95,6 +99,10 @@ mikepenz-iconics-views = { group = "com.mikepenz", name = "iconics-views", versi
 balloon = { group = "com.github.skydoves", name = "balloon", version.ref = "balloon" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "roomRuntime" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+google-api-client-android = { group = "com.google.api-client", name = "google-api-client-android", version.ref = "googleApiClientAndroid" }
+google-api-services-drive = { group = "com.google.apis", name = "google-api-services-drive", version.ref = "googleApiServicesDrive" }
+google-http-client-gson = { group = "com.google.http-client", name = "google-http-client-gson", version.ref = "googleHttpClientGson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

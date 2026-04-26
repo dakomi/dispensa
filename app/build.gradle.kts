@@ -124,5 +124,9 @@ dependencies {
     "fdroidImplementation"(libs.zxing.android.embedded)
     "playImplementation"(libs.play.services.mlkit.barcode.scanning)
     "playImplementation"(libs.text.recognition)
+    "playImplementation"(libs.play.services.auth)
+    "playImplementation"(libs.google.api.client.android)
+    "playImplementation"(libs.google.api.services.drive)
+    "playImplementation"(libs.google.http.client.gson)
 
 }
