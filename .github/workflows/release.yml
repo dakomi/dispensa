@@ -85,18 +85,22 @@ jobs:
           PRERELEASE_FLAG=""
           if [ "$PRERELEASE" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
 
+          printf '%s\n' \
+            "## Dispensa $TAG" \
+            "" \
+            "### Downloads" \
+            "| Variant | Description |" \
+            "|---------|-------------|" \
+            "| \`dispensa-${TAG}-fdroid.apk\` | F-Droid build (no proprietary dependencies) |" \
+            "| \`dispensa-${TAG}-play.apk\` | Google Play build (includes ML Kit, Drive sync) |" \
+            "" \
+            "### Setup" \
+            "Required GitHub secrets for signed builds: \`KEYSTORE_BASE64\`, \`KEYSTORE_PASSWORD\`, \`KEY_ALIAS\`, \`KEY_PASSWORD\`." \
+            > /tmp/release_notes.md
+
           gh release create "$TAG" \
             --title "Dispensa $TAG" \
-            --notes "## Dispensa $TAG
-
-### Downloads
-| Variant | Description |
-|---------|-------------|
-| \`dispensa-${TAG}-fdroid.apk\` | F-Droid build (no proprietary dependencies) |
-| \`dispensa-${TAG}-play.apk\` | Google Play build (includes ML Kit, Drive sync) |
-
-### Setup
-Required GitHub secrets for signed builds: \`KEYSTORE_BASE64\`, \`KEYSTORE_PASSWORD\`, \`KEY_ALIAS\`, \`KEY_PASSWORD\`." \
+            --notes-file /tmp/release_notes.md \
             $PRERELEASE_FLAG \
             app/build/outputs/apk/fdroid/release/dispensa-${TAG}-fdroid.apk \
             app/build/outputs/apk/play/release/dispensa-${TAG}-play.apk
