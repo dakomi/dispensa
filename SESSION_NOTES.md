@@ -481,3 +481,76 @@ Build command requires: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew t
 - `GoogleDriveSyncTransport.DRIVE_FILE_NAME = ".dispensa_sync_changes.json"` — Drive appDataFolder file.
 - `GoogleDriveSyncTransport.MAX_RETRIES = 3` — max retry attempts for transient errors.
 - `DriveTransportFactory` exists in BOTH `play/` and `fdroid/` flavor source sets with identical signatures — `SyncWorker` in `main/` safely calls it without knowing about flavor-specific implementations.
+
+---
+
+## Session 6 — Settings UI
+
+**Date:** 2026-04-26  
+**Goal:** Surface sync controls in the existing Settings screen.
+
+### What was done
+
+- Added a **"Sync" `PreferenceCategory`** (`pref_cat_sync`) to `app/src/main/res/xml/preferences.xml`:
+  - `sync_local_network_enabled` — `CheckBoxPreference` (default: false); enables/disables local-network sync.
+  - `sync_last_timestamp` — non-selectable `Preference` showing the last-sync date/time (or "Never").
+  - `sync_trigger_manual` — tappable `Preference` button that fires `SyncWorkerScheduler.triggerManualSync()`.
+- Created `app/src/play/res/xml/preferences_sync_drive.xml` with three Drive-specific entries:
+  - `sync_drive_enabled` — `CheckBoxPreference` (default: false).
+  - `sync_drive_account` — non-selectable summary displaying the signed-in Google account email.
+  - `sync_drive_sign_out` — tappable button to sign out and disable Drive sync.
+- Created **`SyncSettingsHelper`** in both flavor source sets (same class name, same package, same two public methods — matches the established `DriveTransportFactory` flavor pattern):
+  - `play/`: inflates `preferences_sync_drive.xml`, moves the three Drive prefs into `pref_cat_sync`, updates account summary, wires sign-out listener using `DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED` constant.
+  - `fdroid/`: no-op — Drive sync is not available in the F-Droid build.
+- Updated **`SettingsFragment.java`**:
+  - Added constants `KEY_SYNC_LOCAL_NETWORK_ENABLED`, `KEY_SYNC_LAST_TIMESTAMP`, `KEY_SYNC_TRIGGER_MANUAL`, `PREFS_KEY_LAST_SYNC_EPOCH`.
+  - Added `syncLastTimestampPreference` field.
+  - In `onCreatePreferences`: wires `sync_trigger_manual` click → `SyncWorkerScheduler.triggerManualSync()`; calls `SyncSettingsHelper.setup(this)`.
+  - In `onResume`: calls `updateLastSyncSummary()` and `SyncSettingsHelper.refreshAccountSummary(this)`.
+  - In `onSharedPreferenceChanged`: reacts to `sync_local_network_enabled` toggle → schedules or cancels `SyncWorkerScheduler`.
+  - Added `updateLastSyncSummary()`: reads `sync_last_epoch_ms` from `SharedPreferences` and formats it as `yyyy-MM-dd HH:mm` or "Never".
+- Added **string resources** in both `values/strings.xml` (en) and `values-it/strings.xml` (it):
+  - `pref_cat_sync_title`, `pref_sync_local_network_title/summary`, `pref_sync_last_timestamp_title/never`, `pref_sync_trigger_manual_title/summary`, `pref_sync_drive_title/summary`, `pref_sync_drive_account_title/not_signed_in`, `pref_sync_drive_sign_out_title/summary`, `notify_sync_triggered`, `notify_sync_signed_out`.
+
+### Files changed
+
+- `app/src/main/res/xml/preferences.xml` — added "Sync" PreferenceCategory with three shared sync prefs
+- `app/src/play/res/xml/preferences_sync_drive.xml` — new file; Drive-specific preferences
+- `app/src/main/res/values/strings.xml` — added 15 sync string resources (en)
+- `app/src/main/res/values-it/strings.xml` — added 15 sync string resources (it)
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — sync pref wiring, last-sync summary, SyncSettingsHelper call
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — new play-flavor helper
+- `app/src/fdroid/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — new fdroid no-op helper
+- `PLAN.md` — Session 6 tasks marked complete
+
+### Test results
+
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all 29 fdroid + 45 play unit tests pass (unchanged from Session 5).
+- Both `compileFdroidDebugJavaWithJavac` and `compilePlayDebugJavaWithJavac` succeed with no errors.
+- CodeQL scan: **0 alerts**.
+
+### Handoff to Session 7
+
+**Next session goal:** ProGuard / R8 rules, full integration build validation, and README update.
+
+**Specific tasks:**
+1. Add to `app/proguard-rules.pro`:
+   - `-keep class eu.frigo.dispensa.sync.** { *; }` — preserve all sync classes from R8 shrinking.
+   - Gson serialization keep rules for `SyncChange` and `SyncBlob` (field names must be preserved for JSON round-trips).
+2. Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors.
+3. Run `./gradlew lint` — fix any new warnings introduced since Session 1.
+4. Run full test suite: `./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest`.
+5. Update `README.md` with a "Sync" section describing the feature, how to enable it, and the architecture overview.
+6. Mark all sessions complete in `PLAN.md`.
+
+**Key constraints to carry forward:**
+- All new source code must be **Java** (not Kotlin).
+- No Google dependency outside `playImplementation`.
+- Build: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew assembleFdroidDebug`
+- Tests: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest`
+
+**Conventions established this session:**
+- `SyncSettingsHelper` exists in BOTH `play/` and `fdroid/` flavor source sets with identical class/method signatures — same pattern as `DriveTransportFactory`.
+- Last-sync epoch is stored in `SharedPreferences` under key `sync_last_epoch_ms` (milliseconds since epoch). Session 7 can write this key after a successful sync in `SyncWorker` if desired.
+- `SyncSettingsHelper.setup(fragment)` must be called **after** `setPreferencesFromResource()` in `onCreatePreferences` so that `pref_cat_sync` already exists when the Drive prefs are injected.
+- `SyncSettingsHelper.refreshAccountSummary(fragment)` must be called in `onResume` to keep the account display current after sign-in flows return to the Settings screen.

@@ -15,6 +15,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 
 import eu.frigo.dispensa.R;
+import eu.frigo.dispensa.sync.DriveTransportFactory;
 
 /**
  * Play-flavor helper that injects Google Drive sync preferences into {@link SettingsFragment}.
@@ -43,7 +44,6 @@ public class SyncSettingsHelper {
         Context context = fragment.requireContext();
 
         // Add Drive prefs to the sync category
-        PreferenceScreen screen = fragment.getPreferenceScreen();
         androidx.preference.PreferenceCategory syncCategory =
                 fragment.findPreference("pref_cat_sync");
         if (syncCategory == null) {
@@ -56,8 +56,7 @@ public class SyncSettingsHelper {
 
         // Move the inflated prefs from the root screen into the sync category
         PreferenceScreen rootScreen = fragment.getPreferenceScreen();
-        // The inflated preferences land at root level; move them into the sync category
-        Preference driveEnabled = rootScreen.findPreference("sync_drive_enabled");
+        Preference driveEnabled = rootScreen.findPreference(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED);
         Preference driveAccount = rootScreen.findPreference("sync_drive_account");
         Preference driveSignOut = rootScreen.findPreference("sync_drive_sign_out");
 
@@ -110,7 +109,7 @@ public class SyncSettingsHelper {
             if (driveEnabledPref != null) {
                 PreferenceManager.getDefaultSharedPreferences(context)
                         .edit()
-                        .putBoolean("sync_drive_enabled", false)
+                        .putBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false)
                         .apply();
             }
             if (accountPref != null) {
