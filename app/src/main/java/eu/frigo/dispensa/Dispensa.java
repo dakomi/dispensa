@@ -3,10 +3,15 @@ package eu.frigo.dispensa;
 import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.content.SharedPreferences;
+
+import androidx.preference.PreferenceManager;
 
 import eu.frigo.dispensa.util.ThemeHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorker;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
+import eu.frigo.dispensa.work.SyncWorker;
+import eu.frigo.dispensa.work.SyncWorkerScheduler;
 
 public class Dispensa extends Application {
 
@@ -16,7 +21,16 @@ public class Dispensa extends Application {
         ThemeHelper.applyTheme(this);
         createNotificationChannel();
         ExpiryCheckWorkerScheduler.scheduleWorker(this);
+        scheduleSyncIfEnabled();
     }
+
+    private void scheduleSyncIfEnabled() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        if (prefs.getBoolean(SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED, false)) {
+            SyncWorkerScheduler.schedulePeriodicSync(this);
+        }
+    }
+
     private void createNotificationChannel() {
         CharSequence name = getString(R.string.expiry_notification_channel_name);
         int importance = NotificationManager.IMPORTANCE_DEFAULT;

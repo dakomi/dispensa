@@ -72,6 +72,11 @@ android {
     lint {
         disable.add("UnsafeOptInUsageError")
     }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
     bundle{
         language{
             enableSplit = false

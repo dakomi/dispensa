@@ -211,6 +211,21 @@ public class SyncManager {
     }
 
     /**
+     * Returns the highest {@code clock} value currently stored in the local
+     * {@code sync_changes} table, or {@code 0} if the table is empty.
+     *
+     * <p>This is used after a successful sync cycle to update
+     * {@link #persistLastSyncVersion(long)} so that subsequent exports only include
+     * changes that occurred after this point.
+     */
+    public long getMaxSyncClock() {
+        try (Cursor c = db.query("SELECT COALESCE(MAX(clock), 0) FROM sync_changes", null)) {
+            if (c.moveToFirst()) return c.getLong(0);
+            return 0L;
+        }
+    }
+
+    /**
      * Returns the highest clock value that was successfully synced with all known peers,
      * or {@code 0} if no sync has occurred yet.
      */
