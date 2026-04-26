@@ -302,6 +302,10 @@ public class SyncManager {
                         getInt(obj, "is_predefined")
                 });
                 break;
+            default:
+                android.util.Log.w("SyncManager",
+                        "applyUpsert: unknown table '" + tbl + "' — change ignored");
+                break;
         }
     }
 
@@ -327,6 +331,10 @@ public class SyncManager {
             case "storage_locations":
                 db.execSQL(DELETE_STORAGE_LOCATION_SQL,
                         new Object[]{Long.parseLong(pkVal)});
+                break;
+            default:
+                android.util.Log.w("SyncManager",
+                        "applyDelete: unknown table '" + tbl + "' — change ignored");
                 break;
         }
     }

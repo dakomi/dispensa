@@ -76,8 +76,13 @@ public class SyncWorkerScheduler {
      * @param context any {@link Context}
      */
     public static void triggerManualSync(Context context) {
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+
         OneTimeWorkRequest syncRequest =
                 new OneTimeWorkRequest.Builder(SyncWorker.class)
+                        .setConstraints(constraints)
                         .addTag(MANUAL_WORK_TAG)
                         .build();
 

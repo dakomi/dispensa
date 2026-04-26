@@ -41,7 +41,7 @@ public class GoogleDriveSyncTransportTest {
         mockOps = mock(GoogleDriveSyncTransport.DriveOperations.class);
         mockSyncManager = mock(SyncManager.class);
         // Package-private test constructor: zero-delay backoff, injected DriveOperations.
-        transport = new GoogleDriveSyncTransport(mockOps, mockSyncManager);
+        transport = new GoogleDriveSyncTransport(mockOps);
     }
 
     // ── push(): happy-path ────────────────────────────────────────────────────

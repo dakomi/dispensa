@@ -74,7 +74,7 @@ public class GoogleDriveSyncTransport implements SyncTransport {
      * Production constructor. Builds a {@link Drive} service authenticated with
      * the supplied Google {@link Account} using {@link DriveScopes#DRIVE_APPDATA}.
      */
-    public GoogleDriveSyncTransport(Context context, Account account, SyncManager syncManager) {
+    public GoogleDriveSyncTransport(Context context, Account account) {
         this(buildDriveOps(context, account), 1_000L);
     }
 
@@ -82,7 +82,7 @@ public class GoogleDriveSyncTransport implements SyncTransport {
      * Package-private constructor for unit tests — injects a {@link DriveOperations} mock
      * and uses zero-delay backoff so tests run instantly.
      */
-    GoogleDriveSyncTransport(DriveOperations driveOps, SyncManager syncManager) {
+    GoogleDriveSyncTransport(DriveOperations driveOps) {
         this(driveOps, 0L);
     }
 
