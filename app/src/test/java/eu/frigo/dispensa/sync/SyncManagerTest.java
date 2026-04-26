@@ -7,7 +7,9 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -26,7 +28,6 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 
 public class SyncManagerTest {
 
@@ -43,6 +44,12 @@ public class SyncManagerTest {
 
         when(mockPrefs.edit()).thenReturn(mockEditor);
         when(mockEditor.putLong(anyString(), anyLong())).thenReturn(mockEditor);
+        when(mockEditor.putString(anyString(), anyString())).thenReturn(mockEditor);
+
+        // Return a stable device ID so tests are deterministic
+        when(mockPrefs.getString(eq(SyncManager.PREFS_KEY_DEVICE_ID), isNull()))
+                .thenReturn("test-device-a");
+        when(mockPrefs.getLong(anyString(), anyLong())).thenReturn(0L);
 
         syncManager = new SyncManager(mockDb, mockPrefs);
     }
@@ -51,9 +58,8 @@ public class SyncManagerTest {
 
     @Test
     public void exportChanges_returnsValidJsonBlob_whenCursorHasRows() {
-        Cursor cursor = buildSingleRowCursor(
-                "products", "['1']", "product_name", "Apple",
-                1L, 5L, new byte[]{0x01, 0x02, 0x03, 0x04}, 1L, 0L);
+        Cursor cursor = buildExportCursor("products", "1", "UPSERT",
+                "{\"id\":1,\"product_name\":\"Apple\"}", 5L);
         when(mockDb.query(anyString(), any(Object[].class))).thenReturn(cursor);
 
         byte[] blob = syncManager.exportChanges(0L);
@@ -69,23 +75,17 @@ public class SyncManagerTest {
         assertEquals(1, parsed.changes.size());
 
         SyncChange change = parsed.changes.get(0);
-        assertEquals("products", change.table);
-        assertEquals("['1']", change.pk);
-        assertEquals("product_name", change.cid);
-        assertEquals("Apple", change.val);
-        assertEquals(1L, change.colVersion);
-        assertEquals(5L, change.dbVersion);
-        assertEquals(Base64.getEncoder().encodeToString(new byte[]{0x01, 0x02, 0x03, 0x04}),
-                change.siteId);
-        assertEquals(1L, change.cl);
-        assertEquals(0L, change.seq);
+        assertEquals("products", change.tbl);
+        assertEquals("1", change.pkVal);
+        assertEquals("UPSERT", change.op);
+        assertEquals("{\"id\":1,\"product_name\":\"Apple\"}", change.rowJson);
+        assertEquals(5L, change.clock);
+        assertEquals("test-device-a", change.deviceId);
     }
 
     @Test
-    public void exportChanges_handlesNullVal() {
-        Cursor cursor = buildSingleRowCursor(
-                "products", "['2']", "expiry_date", null,
-                1L, 3L, new byte[]{0x0A}, 1L, 0L);
+    public void exportChanges_handlesNullRowJson_forDelete() {
+        Cursor cursor = buildExportCursor("products", "2", "DELETE", null, 3L);
         when(mockDb.query(anyString(), any(Object[].class))).thenReturn(cursor);
 
         byte[] blob = syncManager.exportChanges(0L);
@@ -93,7 +93,8 @@ public class SyncManagerTest {
         String json = new String(blob, StandardCharsets.UTF_8);
         SyncBlob parsed = new Gson().fromJson(json, SyncBlob.class);
         assertEquals(1, parsed.changes.size());
-        assertTrue(parsed.changes.get(0).val == null);
+        assertEquals("DELETE", parsed.changes.get(0).op);
+        assertTrue(parsed.changes.get(0).rowJson == null);
     }
 
     @Test
@@ -127,43 +128,76 @@ public class SyncManagerTest {
     // ── importChanges ─────────────────────────────────────────────────────────
 
     @Test
-    public void importChanges_insertsEachChangeIntoDatabase() {
-        // Build a blob with two changes
-        SyncChange c1 = makeChange("products", "['1']", "product_name", "Milk",
-                1L, 2L, new byte[]{0x11}, 1L, 0L);
-        SyncChange c2 = makeChange("storage_locations", "['5']", "name", "Fridge",
-                1L, 3L, new byte[]{0x22}, 1L, 0L);
-        SyncBlob blob = new SyncBlob(java.util.Arrays.asList(c1, c2));
-        byte[] blobBytes = new Gson().toJson(blob).getBytes(StandardCharsets.UTF_8);
+    public void importChanges_insertsProductUpsertIntoDatabase() {
+        stubZeroLocalClock();
+
+        SyncChange c = makeChange("products", "1", "UPSERT",
+                "{\"id\":1,\"barcode\":null,\"quantity\":2,\"expiry_date\":null,"
+                        + "\"product_name\":\"Milk\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                5L, "device-b");
+        byte[] blobBytes = makeBlobBytes(c);
 
         syncManager.importChanges(blobBytes);
 
-        verify(mockDb, times(2)).execSQL(anyString(), any(Object[].class));
+        verify(mockDb).execSQL(contains("INSERT OR REPLACE INTO products"), any(Object[].class));
     }
 
     @Test
-    public void importChanges_passesCorrectParametersToExecSql() {
-        byte[] siteIdBytes = new byte[]{0x01, 0x02, 0x03};
-        SyncChange c = makeChange("products", "['1']", "quantity", "3",
-                2L, 7L, siteIdBytes, 1L, 0L);
-        SyncBlob blob = new SyncBlob(java.util.Collections.singletonList(c));
-        byte[] blobBytes = new Gson().toJson(blob).getBytes(StandardCharsets.UTF_8);
+    public void importChanges_passesCorrectParametersForProductUpsert() {
+        stubZeroLocalClock();
+
+        SyncChange c = makeChange("products", "7", "UPSERT",
+                "{\"id\":7,\"barcode\":\"123\",\"quantity\":3,\"expiry_date\":null,"
+                        + "\"product_name\":\"Yogurt\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                8L, "device-b");
+        byte[] blobBytes = makeBlobBytes(c);
 
         syncManager.importChanges(blobBytes);
 
         ArgumentCaptor<Object[]> argsCaptor = ArgumentCaptor.forClass(Object[].class);
-        verify(mockDb).execSQL(anyString(), argsCaptor.capture());
+        verify(mockDb).execSQL(contains("INSERT OR REPLACE INTO products"), argsCaptor.capture());
         Object[] args = argsCaptor.getValue();
 
-        assertEquals("products", args[0]);
-        assertEquals("['1']", args[1]);
-        assertEquals("quantity", args[2]);
-        assertEquals("3", args[3]);
-        assertEquals(2L, args[4]);
-        assertEquals(7L, args[5]);
-        assertArrayEquals(siteIdBytes, (byte[]) args[6]);
-        assertEquals(1L, args[7]);
-        assertEquals(0L, args[8]);
+        assertEquals(7, args[0]);          // id
+        assertEquals("123", args[1]);      // barcode
+        assertEquals(3, args[2]);          // quantity
+        assertTrue(args[3] == null);       // expiry_date nullable → null
+        assertEquals("Yogurt", args[4]);   // product_name
+        assertTrue(args[5] == null);       // image_url
+        assertEquals("FRIDGE", args[6]);   // storage_location
+        assertEquals(0L, args[7]);         // opened_date
+        assertEquals(-1, args[8]);         // shelf_life_after_opening_days
+    }
+
+    @Test
+    public void importChanges_insertsEachChangeIntoDatabase() {
+        stubZeroLocalClock();
+
+        SyncChange c1 = makeChange("products", "1", "UPSERT",
+                "{\"id\":1,\"barcode\":null,\"quantity\":1,\"expiry_date\":null,"
+                        + "\"product_name\":\"Milk\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                2L, "device-b");
+        SyncChange c2 = makeChange("storage_locations", "5", "UPSERT",
+                "{\"id\":5,\"name\":\"Fridge\",\"internal_key\":\"FRIDGE\","
+                        + "\"order_index\":0,\"is_default\":1,\"is_predefined\":1}",
+                3L, "device-b");
+        byte[] blobBytes = makeBlobBytes(new Gson().toJson(new SyncBlob(
+                java.util.Arrays.asList(c1, c2))));
+
+        syncManager.importChanges(blobBytes);
+
+        // Verify the two per-table upserts (neither is sync_changes)
+        verify(mockDb).execSQL(contains("INSERT OR REPLACE INTO products"), any(Object[].class));
+        verify(mockDb).execSQL(contains("INSERT OR REPLACE INTO storage_locations"),
+                any(Object[].class));
+        // Verify two change records written to sync_changes
+        verify(mockDb, times(2)).execSQL(contains("INTO sync_changes"), any(Object[].class));
     }
 
     @Test
@@ -174,47 +208,100 @@ public class SyncManagerTest {
         syncManager.importChanges(blobBytes);
 
         verify(mockDb, never()).execSQL(anyString(), any(Object[].class));
+        verify(mockDb, never()).beginTransaction();
     }
 
     @Test
     public void importChanges_doesNothing_whenBlobIsNull() {
-        syncManager.importChanges("null".getBytes(StandardCharsets.UTF_8));
+        syncManager.importChanges(null);
 
         verify(mockDb, never()).execSQL(anyString(), any(Object[].class));
+        verify(mockDb, never()).beginTransaction();
+    }
+
+    @Test
+    public void importChanges_skipsChange_whenLocalClockIsHigher() {
+        // Local clock = 10, incoming clock = 5 → incoming loses, no upsert
+        Cursor highClockCursor = mock(Cursor.class);
+        when(highClockCursor.moveToFirst()).thenReturn(true);
+        when(highClockCursor.getLong(0)).thenReturn(10L);
+        when(mockDb.query(contains("MAX"), any(Object[].class))).thenReturn(highClockCursor);
+
+        SyncChange c = makeChange("products", "1", "UPSERT",
+                "{\"id\":1,\"barcode\":null,\"quantity\":1,\"expiry_date\":null,"
+                        + "\"product_name\":\"Milk\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                5L, "device-b");
+        byte[] blobBytes = makeBlobBytes(c);
+
+        syncManager.importChanges(blobBytes);
+
+        verify(mockDb, never()).execSQL(contains("INSERT OR REPLACE INTO products"),
+                any(Object[].class));
+    }
+
+    @Test
+    public void importChanges_setsAndReleasesImportLock() {
+        stubZeroLocalClock();
+
+        SyncChange c = makeChange("products", "1", "UPSERT",
+                "{\"id\":1,\"barcode\":null,\"quantity\":1,\"expiry_date\":null,"
+                        + "\"product_name\":\"Milk\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                5L, "device-b");
+        byte[] blobBytes = makeBlobBytes(c);
+
+        syncManager.importChanges(blobBytes);
+
+        verify(mockDb).execSQL(eq("UPDATE sync_import_lock SET locked = 1"));
+        verify(mockDb).execSQL(eq("UPDATE sync_import_lock SET locked = 0"));
     }
 
     // ── Round-trip ────────────────────────────────────────────────────────────
 
     @Test
-    public void roundTrip_exportThenImport_callsExecSqlWithOriginalData() {
-        byte[] siteIdBytes = new byte[]{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10};
-        Cursor cursor = buildSingleRowCursor(
-                "products", "['42']", "product_name", "Yogurt",
-                3L, 10L, siteIdBytes, 2L, 1L);
-        when(mockDb.query(anyString(), any(Object[].class))).thenReturn(cursor);
+    public void roundTrip_exportThenImport_appliesCorrectProductUpsert() {
+        Cursor exportCursor = buildExportCursor("products", "42", "UPSERT",
+                "{\"id\":42,\"barcode\":\"999\",\"quantity\":1,\"expiry_date\":null,"
+                        + "\"product_name\":\"Yogurt\",\"image_url\":null,"
+                        + "\"storage_location\":\"FRIDGE\",\"opened_date\":0,"
+                        + "\"shelf_life_after_opening_days\":-1}",
+                10L);
+        when(mockDb.query(anyString(), any(Object[].class))).thenReturn(exportCursor);
 
-        // Export from one SyncManager
+        // Export from first manager
         byte[] blob = syncManager.exportChanges(0L);
 
-        // Import into a second SyncManager backed by a fresh mock db
+        // Import into second manager (different device)
         SupportSQLiteDatabase importDb = mock(SupportSQLiteDatabase.class);
-        SyncManager importManager = new SyncManager(importDb, mock(SharedPreferences.class));
+        SharedPreferences importPrefs = mock(SharedPreferences.class);
+        when(importPrefs.getString(eq(SyncManager.PREFS_KEY_DEVICE_ID), isNull()))
+                .thenReturn("test-device-b");
+        when(importPrefs.getLong(anyString(), anyLong())).thenReturn(0L);
+        SharedPreferences.Editor importEditor = mock(SharedPreferences.Editor.class);
+        when(importPrefs.edit()).thenReturn(importEditor);
+        when(importEditor.putString(anyString(), anyString())).thenReturn(importEditor);
+        // Stub zero local clock for the import device
+        Cursor zeroClockCursor = mock(Cursor.class);
+        when(zeroClockCursor.moveToFirst()).thenReturn(true);
+        when(zeroClockCursor.getLong(0)).thenReturn(0L);
+        when(importDb.query(contains("MAX"), any(Object[].class))).thenReturn(zeroClockCursor);
+
+        SyncManager importManager = new SyncManager(importDb, importPrefs);
         importManager.importChanges(blob);
 
+        // Verify the product row was upserted
         ArgumentCaptor<Object[]> argsCaptor = ArgumentCaptor.forClass(Object[].class);
-        verify(importDb).execSQL(anyString(), argsCaptor.capture());
+        verify(importDb).execSQL(contains("INSERT OR REPLACE INTO products"),
+                argsCaptor.capture());
         Object[] args = argsCaptor.getValue();
-
-        assertEquals("products", args[0]);
-        assertEquals("['42']", args[1]);
-        assertEquals("product_name", args[2]);
-        assertEquals("Yogurt", args[3]);
-        assertEquals(3L, args[4]);
-        assertEquals(10L, args[5]);
-        assertArrayEquals(siteIdBytes, (byte[]) args[6]);
-        assertEquals(2L, args[7]);
-        assertEquals(1L, args[8]);
+        assertEquals(42, args[0]);        // id
+        assertEquals("999", args[1]);     // barcode
+        assertEquals(1, args[2]);         // quantity
+        assertTrue(args[3] == null);      // expiry_date
+        assertEquals("Yogurt", args[4]);  // product_name
     }
 
     // ── SharedPreferences persistence ─────────────────────────────────────────
@@ -244,38 +331,48 @@ public class SyncManagerTest {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
-     * Builds a mock {@link Cursor} that returns exactly one row.
-     * {@code val} may be {@code null} to simulate a DB NULL column value.
+     * Builds a mock {@link Cursor} representing one row from the export query.
+     * Columns: tbl(0), pk_val(1), op(2), row_json(3), clock(4).
      */
-    private Cursor buildSingleRowCursor(String table, String pk, String cid, String val,
-            long colVersion, long dbVersion, byte[] siteId, long cl, long seq) {
+    private Cursor buildExportCursor(String tbl, String pkVal, String op,
+            String rowJson, long clock) {
         Cursor cursor = mock(Cursor.class);
         when(cursor.moveToNext()).thenReturn(true, false);
-        when(cursor.getString(0)).thenReturn(table);
-        when(cursor.getString(1)).thenReturn(pk);
-        when(cursor.getString(2)).thenReturn(cid);
-        when(cursor.isNull(3)).thenReturn(val == null);
-        when(cursor.getString(3)).thenReturn(val);
-        when(cursor.getLong(4)).thenReturn(colVersion);
-        when(cursor.getLong(5)).thenReturn(dbVersion);
-        when(cursor.getBlob(6)).thenReturn(siteId);
-        when(cursor.getLong(7)).thenReturn(cl);
-        when(cursor.getLong(8)).thenReturn(seq);
+        when(cursor.getString(0)).thenReturn(tbl);
+        when(cursor.getString(1)).thenReturn(pkVal);
+        when(cursor.getString(2)).thenReturn(op);
+        when(cursor.isNull(3)).thenReturn(rowJson == null);
+        when(cursor.getString(3)).thenReturn(rowJson);
+        when(cursor.getLong(4)).thenReturn(clock);
         return cursor;
     }
 
-    private SyncChange makeChange(String table, String pk, String cid, String val,
-            long colVersion, long dbVersion, byte[] siteId, long cl, long seq) {
+    private SyncChange makeChange(String tbl, String pkVal, String op,
+            String rowJson, long clock, String deviceId) {
         SyncChange c = new SyncChange();
-        c.table = table;
-        c.pk = pk;
-        c.cid = cid;
-        c.val = val;
-        c.colVersion = colVersion;
-        c.dbVersion = dbVersion;
-        c.siteId = Base64.getEncoder().encodeToString(siteId);
-        c.cl = cl;
-        c.seq = seq;
+        c.tbl = tbl;
+        c.pkVal = pkVal;
+        c.op = op;
+        c.rowJson = rowJson;
+        c.clock = clock;
+        c.deviceId = deviceId;
         return c;
+    }
+
+    private byte[] makeBlobBytes(SyncChange change) {
+        SyncBlob blob = new SyncBlob(java.util.Collections.singletonList(change));
+        return new Gson().toJson(blob).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] makeBlobBytes(String json) {
+        return json.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** Stubs the MAX-clock query to return 0 (no prior local changes). */
+    private void stubZeroLocalClock() {
+        Cursor zeroClockCursor = mock(Cursor.class);
+        when(zeroClockCursor.moveToFirst()).thenReturn(true);
+        when(zeroClockCursor.getLong(0)).thenReturn(0L);
+        when(mockDb.query(contains("MAX"), any(Object[].class))).thenReturn(zeroClockCursor);
     }
 }

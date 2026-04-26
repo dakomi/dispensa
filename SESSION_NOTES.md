@@ -221,3 +221,80 @@ Build command requires: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew t
 **Known issues / blockers:**
 - `io.vlcn:crsqlite-android` is not on any public Maven repo. A stub `CrSqliteOpenHelperFactory` is in place. The stub uses the standard Android SQLite, so `crsql_as_crr()` calls in `MIGRATION_9_10` and `crsql_changes` queries in `SyncManager` will throw at runtime until a real library is sourced. Non-sync app features are unaffected.
 - Session 4 should not need to touch the CR-SQLite layer; the sync transport and worker can be implemented and tested independently of the underlying CRDT mechanism.
+
+---
+
+## Session 3 (Revision) — Pivot to Trigger-Based CRDT; SyncManager Completion
+
+**Date:** 2026-04-26
+**Goal:** Replace the CR-SQLite approach (blocked — library not on any public Maven repo) with a pure-SQLite trigger-based CRDT change log, and fully implement `SyncManager` with conflict resolution and unit tests.
+
+### What was done
+
+- **Decided on Option 1 (trigger-based change log)** as directed by the user, discarding the CR-SQLite approach entirely.
+- Removed `io.vlcn.crsqlite.CrSqliteOpenHelperFactory` stub (`app/src/main/java/io/vlcn/crsqlite/`) — no longer needed.
+- Removed `crsqlite` version entry and `crsqlite-android` library entry from `gradle/libs.versions.toml`.
+- Removed commented-out `implementation(libs.crsqlite.android)` block from `app/build.gradle.kts`.
+- **Replaced `MIGRATION_9_10`** content in `AppDatabase.java` (same version 9→10 boundary, different SQL):
+  - Creates `sync_changes (tbl TEXT, pk_val TEXT, op TEXT, row_json TEXT, clock INTEGER, PRIMARY KEY(tbl, pk_val))` — one entry per (table, row) holding the latest Lamport clock.
+  - Creates `sync_import_lock (locked INTEGER DEFAULT 0)` — single-row flag read by trigger WHEN clauses.
+  - Creates 12 AFTER INSERT/UPDATE/DELETE triggers (3 × 4 tables): `sync_products_insert/update/delete`, `sync_categories_insert/update/delete`, `sync_product_category_links_insert/update/delete`, `sync_storage_locations_insert/update/delete`.
+  - Each trigger fires `INSERT OR REPLACE INTO sync_changes` with `json_object()` for full row serialization and `COALESCE(MAX(clock),0)+1` for the global Lamport clock; suppressed when `sync_import_lock.locked = 1`.
+- Removed `.openHelperFactory(new CrSqliteOpenHelperFactory())` from `AppDatabase.getDatabase()`.
+- **Redesigned `SyncChange` DTO**: replaced 9 CR-SQLite-specific fields with 6 trigger-oriented fields: `tbl`, `pkVal`, `op`, `rowJson`, `clock`, `deviceId`.
+- **Rewrote `SyncManager.java`**:
+  - `exportChanges(lastSyncVersion)` — `SELECT tbl, pk_val, op, row_json, clock FROM sync_changes WHERE clock > ? ORDER BY clock ASC`; appends local `deviceId` (UUID from `SharedPreferences`) to each change.
+  - `importChanges(blobBytes)` — opens a transaction, sets import lock, iterates changes applying LWW: incoming wins if `clock > localMaxClock` or (`clock == localMaxClock` and `deviceId` is lexicographically higher); calls per-table `applyUpsert()` or `applyDelete()` then writes to `RECORD_CHANGE_SQL`; releases lock before committing.
+  - Per-table `applyUpsert(tbl, rowJson)` — uses Gson `JsonParser` to extract fields and calls hardcoded `INSERT OR REPLACE INTO <table>` SQL.
+  - Per-table `applyDelete(tbl, pkVal)` — calls hardcoded `DELETE FROM <table> WHERE id = ?` (composite PK split by comma for `product_category_links`).
+  - `getLocalDeviceId()` — generates UUID once and persists in `SharedPreferences` key `sync_device_id`.
+- **Updated `SyncManagerTest.java`** (16 tests, all passing):
+  - Replaced 9-column cursor helper with 5-column `buildExportCursor(tbl, pkVal, op, rowJson, clock)`.
+  - Added tests: `importChanges_insertsProductUpsertIntoDatabase`, `importChanges_passesCorrectParametersForProductUpsert`, `importChanges_skipsChange_whenLocalClockIsHigher`, `importChanges_setsAndReleasesImportLock`, `roundTrip_exportThenImport_appliesCorrectProductUpsert`.
+  - Stubbed `prefs.getString(PREFS_KEY_DEVICE_ID, null)` to return a stable `"test-device-a"`.
+- **Updated `MigrationTest.java`**: removed `CrSqliteOpenHelperFactory` usage; updated test to verify `sync_changes`, `sync_import_lock`, and all 12 trigger names in `sqlite_master`.
+
+### Files changed
+
+- `gradle/libs.versions.toml` — removed `crsqlite` version, `crsqlite-android` library entry
+- `app/build.gradle.kts` — removed commented-out `crsqlite.android` dependency block
+- `app/src/main/java/io/vlcn/crsqlite/CrSqliteOpenHelperFactory.java` — **deleted** (entire `io/vlcn/` tree)
+- `app/src/main/java/eu/frigo/dispensa/data/AppDatabase.java` — removed CrSqlite import/factory; rewrote `MIGRATION_9_10` with trigger SQL
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncChange.java` — redesigned DTO (tbl, pkVal, op, rowJson, clock, deviceId)
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java` — complete rewrite with trigger-based export/import and LWW conflict resolution
+- `app/src/test/java/eu/frigo/dispensa/sync/SyncManagerTest.java` — updated for new DTO and SQL; 16 tests
+- `app/src/androidTest/java/eu/frigo/dispensa/MigrationTest.java` — removed CrSqlite; verifies new sync tables and triggers
+- `PLAN.md` — updated architecture decisions, data flow diagram, all session statuses
+- `SESSION_NOTES.md` — added this section
+
+### Test results
+
+`JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all 16 unit tests pass.
+
+### Handoff to Session 4
+
+**Next session goal:** Implement `LocalNetworkSyncTransport` (mDNS + TCP) and `SyncWorker` (WorkManager).
+
+**Specific tasks:**
+1. Create `eu.frigo.dispensa.sync.LocalNetworkSyncTransport` (both flavors):
+   - Register `_dispensa._tcp` service via `NsdManager` on a random port.
+   - On peer discovery: open a TCP socket; call `SyncManager.exportChanges(getLastSyncVersion())`, send the blob, receive peer's blob, call `SyncManager.importChanges()`, call `SyncManager.persistLastSyncVersion(maxClock)`.
+   - Acquire `WifiManager.createMulticastLock` while the service is registered.
+2. Create `eu.frigo.dispensa.work.SyncWorker` (extends `Worker`):
+   - Instantiate `LocalNetworkSyncTransport` and drive the push/pull cycle.
+   - Schedule `PeriodicWorkRequest` (15-minute interval) and support manual one-shot tag `"MANUAL_SYNC"`.
+3. Register scheduling in `Dispensa.java` application class, gated on `sync_local_network_enabled` preference.
+4. Write unit tests (mock `NsdManager`).
+
+**Key constraints to carry forward:**
+- All new source code must be **Java** (not Kotlin).
+- No Google dependency outside `playImplementation`.
+- `SyncManager` is transport-agnostic — do not modify it for network concerns.
+- Build: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew assembleFdroidDebug`
+- Tests: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest`
+
+**Conventions / patterns established this session:**
+- `sync_changes` uses composite PK `(tbl, pk_val)` — only the latest version of each row is kept; `clock` is a global Lamport counter.
+- Composite PKs in `product_category_links` are encoded in `pk_val` as `"product_id_fk,category_id_fk"` (comma-separated).
+- Import always runs inside a transaction; `sync_import_lock.locked = 1` suppresses trigger re-fire.
+- Device UUID lives at `SharedPreferences` key `sync_device_id`; last sync version at `last_sync_version`.

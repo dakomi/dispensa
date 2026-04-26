@@ -15,9 +15,7 @@ import java.io.IOException;
 import java.util.Collections;
 
 import eu.frigo.dispensa.data.AppDatabase;
-import io.vlcn.crsqlite.CrSqliteOpenHelperFactory;
 
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -32,21 +30,20 @@ public class MigrationTest {
     public MigrationTestHelper helper = new MigrationTestHelper(
             InstrumentationRegistry.getInstrumentation(),
             AppDatabase.class,
-            Collections.emptyList(),
-            new CrSqliteOpenHelperFactory()
+            Collections.emptyList()
     );
 
     /**
-     * Verifies that the 9→10 migration completes successfully and that the
-     * {@code crsql_changes} virtual table (exposed by the CR-SQLite extension)
-     * is accessible after the migration.
+     * Verifies that the 9→10 migration completes successfully: the {@code sync_changes}
+     * and {@code sync_import_lock} helper tables are created, the twelve change-capture
+     * triggers are installed, and all four synced entity tables still exist.
      */
     @Test
     public void migrate9To10() throws IOException {
         // Create the database at version 9.
         helper.createDatabase(TEST_DB, 9);
 
-        // Apply MIGRATION_9_10 and open the database at version 10.
+        // Apply MIGRATION_9_10 and validate the resulting schema.
         SupportSQLiteDatabase db = helper.runMigrationsAndValidate(
                 TEST_DB,
                 10,
@@ -54,22 +51,44 @@ public class MigrationTest {
                 AppDatabase.MIGRATION_9_10
         );
 
-        // Verify that the crsql_changes virtual table is accessible.
-        Cursor cursor = db.query("SELECT * FROM crsql_changes LIMIT 1");
-        assertNotNull("crsql_changes virtual table should be accessible", cursor);
-        cursor.close();
+        // Sync infrastructure tables must exist.
+        assertTrue("sync_changes table must exist", tableExists(db, "sync_changes"));
+        assertTrue("sync_import_lock table must exist", tableExists(db, "sync_import_lock"));
 
-        // Verify that all four CRDT-enabled tables still exist.
+        // All four synced entity tables must still exist.
         assertTrue(tableExists(db, "products"));
         assertTrue(tableExists(db, "categories_definitions"));
         assertTrue(tableExists(db, "product_category_links"));
         assertTrue(tableExists(db, "storage_locations"));
+
+        // The twelve change-capture triggers must have been created.
+        String[] expectedTriggers = {
+                "sync_products_insert", "sync_products_update", "sync_products_delete",
+                "sync_categories_insert", "sync_categories_update", "sync_categories_delete",
+                "sync_product_category_links_insert", "sync_product_category_links_update",
+                "sync_product_category_links_delete",
+                "sync_storage_locations_insert", "sync_storage_locations_update",
+                "sync_storage_locations_delete"
+        };
+        for (String trigger : expectedTriggers) {
+            assertTrue("Trigger must exist: " + trigger, triggerExists(db, trigger));
+        }
     }
 
     private boolean tableExists(SupportSQLiteDatabase db, String tableName) {
         Cursor cursor = db.query(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
                 new Object[]{tableName}
+        );
+        boolean exists = cursor.moveToFirst();
+        cursor.close();
+        return exists;
+    }
+
+    private boolean triggerExists(SupportSQLiteDatabase db, String triggerName) {
+        Cursor cursor = db.query(
+                "SELECT name FROM sqlite_master WHERE type='trigger' AND name=?",
+                new Object[]{triggerName}
         );
         boolean exists = cursor.moveToFirst();
         cursor.close();
