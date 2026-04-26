@@ -301,6 +301,10 @@ public class SyncManager {
                 break;
             case "product_category_links": {
                 String[] parts = pkVal.split(",", 2);
+                if (parts.length < 2) {
+                    throw new IllegalArgumentException(
+                            "Invalid composite pk_val for product_category_links: " + pkVal);
+                }
                 db.execSQL(DELETE_PRODUCT_CATEGORY_LINK_SQL,
                         new Object[]{Long.parseLong(parts[0]), Long.parseLong(parts[1])});
                 break;

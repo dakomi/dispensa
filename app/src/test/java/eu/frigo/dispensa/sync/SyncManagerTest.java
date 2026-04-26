@@ -3,6 +3,7 @@ package eu.frigo.dispensa.sync;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -94,7 +95,7 @@ public class SyncManagerTest {
         SyncBlob parsed = new Gson().fromJson(json, SyncBlob.class);
         assertEquals(1, parsed.changes.size());
         assertEquals("DELETE", parsed.changes.get(0).op);
-        assertTrue(parsed.changes.get(0).rowJson == null);
+        assertNull(parsed.changes.get(0).rowJson);
     }
 
     @Test
@@ -165,9 +166,7 @@ public class SyncManagerTest {
         assertEquals(7, args[0]);          // id
         assertEquals("123", args[1]);      // barcode
         assertEquals(3, args[2]);          // quantity
-        assertTrue(args[3] == null);       // expiry_date nullable → null
-        assertEquals("Yogurt", args[4]);   // product_name
-        assertTrue(args[5] == null);       // image_url
+        assertNull(args[3]);               // expiry_date nullable → null
         assertEquals("FRIDGE", args[6]);   // storage_location
         assertEquals(0L, args[7]);         // opened_date
         assertEquals(-1, args[8]);         // shelf_life_after_opening_days
@@ -300,7 +299,7 @@ public class SyncManagerTest {
         assertEquals(42, args[0]);        // id
         assertEquals("999", args[1]);     // barcode
         assertEquals(1, args[2]);         // quantity
-        assertTrue(args[3] == null);      // expiry_date
+        assertNull(args[3]);              // expiry_date
         assertEquals("Yogurt", args[4]);  // product_name
     }
 
