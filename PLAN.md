@@ -210,13 +210,13 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Add ProGuard rules, run full integration validation, update documentation.
 
-- [ ] Add to `app/proguard-rules.pro`:
+- [x] Add to `app/proguard-rules.pro`:
   - `eu.frigo.dispensa.sync.**` keep rule
   - Gson serialization keep rules for `SyncChange` / `SyncBlob`
-- [ ] Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors
-- [ ] Run `./gradlew lint` — fix any new warnings
-- [ ] Run full test suite: `./gradlew testFdroidDebugUnitTest` + `./gradlew testPlayDebugUnitTest`
-- [ ] Update `README.md` with sync feature description
-- [ ] Mark all sessions complete in this file
+- [x] Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors
+- [x] Run `./gradlew lint` — fix any new warnings
+- [x] Run full test suite: `./gradlew testFdroidDebugUnitTest` + `./gradlew testPlayDebugUnitTest`
+- [x] Update `README.md` with sync feature description
+- [x] Mark all sessions complete in this file
 
 **Tests:** Full build + lint + unit test pass on both flavors.
