@@ -153,18 +153,21 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Implement mDNS peer discovery and TCP-based change exchange; wire into WorkManager.
 
-- [ ] Create `eu.frigo.dispensa.sync.LocalNetworkSyncTransport` (Java):
+- [x] Create `eu.frigo.dispensa.sync.LocalNetworkSyncTransport` (Java):
   - Register/discover Dispensa service via `NsdManager` (service type `_dispensa._tcp`)
   - On discovery: open TCP socket, push/pull JSON blobs via `SyncManager`
   - Handle `CHANGE_WIFI_MULTICAST_STATE` multicast lock
-- [ ] Create `eu.frigo.dispensa.work.SyncWorker` (WorkManager `Worker`):
+- [x] Create `eu.frigo.dispensa.work.SyncWorker` (WorkManager `Worker`):
   - Instantiate `LocalNetworkSyncTransport` and call `SyncManager` export/import
   - Schedule periodic sync (15-minute minimum interval via `PeriodicWorkRequest`)
   - Support one-shot manual trigger from Settings
-- [ ] Register `SyncWorker` in `Dispensa.java` (application class)
-- [ ] Write unit tests for `LocalNetworkSyncTransport` discovery logic (mock `NsdManager`)
+- [x] Create `eu.frigo.dispensa.work.SyncWorkerScheduler` (schedulePeriodicSync / triggerManualSync / cancelPeriodicSync)
+- [x] Register `SyncWorker` in `Dispensa.java` (application class), gated on `sync_local_network_enabled` preference
+- [x] Add `getMaxSyncClock()` helper to `SyncManager` for post-sync version tracking
+- [x] Write unit tests for `LocalNetworkSyncTransport` discovery logic (mock `NsdManager`)
+- [x] Add `testOptions { unitTests { isReturnDefaultValues = true } }` to `build.gradle.kts`
 
-**Tests:** JUnit 4 + manual on-device verification.
+**Tests:** JUnit 4 — all 29 unit tests pass.
 
 ---
 

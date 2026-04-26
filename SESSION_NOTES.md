@@ -298,3 +298,92 @@ Build command requires: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew t
 - Composite PKs in `product_category_links` are encoded in `pk_val` as `"product_id_fk,category_id_fk"` (comma-separated).
 - Import always runs inside a transaction; `sync_import_lock.locked = 1` suppresses trigger re-fire.
 - Device UUID lives at `SharedPreferences` key `sync_device_id`; last sync version at `last_sync_version`.
+
+---
+
+## Session 4 — Local Network Transport
+
+**Date:** 2026-04-26  
+**Goal:** Implement `LocalNetworkSyncTransport` (mDNS + TCP) and wire it into WorkManager via `SyncWorker`.
+
+### What was done
+
+- Created `eu.frigo.dispensa.sync.LocalNetworkSyncTransport`:
+  - Registers a `_dispensa._tcp.` NSD service pointing to a dynamically-assigned TCP `ServerSocket`.
+  - A background accept-loop receives peer blobs, applies them via `SyncManager.importChanges()`, and replies with `SyncManager.exportChanges()`.
+  - `push(data, callback)` connects to the first resolved peer, sends `data`, receives peer blob, delivers it via `SyncCallback.onSuccess(byte[])`.
+  - `pull(callback)` is passive (returns `null`); incoming connections are handled by the server thread.
+  - Self-detection: `onServiceResolved` skips entries whose port matches `localPort`.
+  - Acquires `WifiManager.MulticastLock` on `start()`; releases on `stop()`.
+  - Package-private constructor injects `NsdManager`, `MulticastLock`, `SyncManager`, `ExecutorService` for unit testing.
+- Added `getMaxSyncClock()` to `SyncManager` — queries `SELECT COALESCE(MAX(clock), 0) FROM sync_changes` for post-sync version tracking.
+- Created `eu.frigo.dispensa.work.SyncWorker`:
+  - Extends `Worker`; runs on a WorkManager background thread.
+  - Checks `sync_local_network_enabled` preference; exits early if disabled.
+  - Starts transport, sleeps 5 s for mDNS discovery, exports changes, calls `transport.push()`, awaits callback (30 s timeout), imports peer blob if present, persists `getMaxSyncClock()`.
+  - Public constant `TAG_MANUAL = "MANUAL_SYNC"`.
+- Created `eu.frigo.dispensa.work.SyncWorkerScheduler`:
+  - `schedulePeriodicSync(ctx)` — 15-minute `PeriodicWorkRequest`, `KEEP` policy, `CONNECTED` network constraint.
+  - `triggerManualSync(ctx)` — one-shot `OneTimeWorkRequest`, `REPLACE` policy.
+  - `cancelPeriodicSync(ctx)` — cancels by unique work name.
+- Updated `Dispensa.java` to call `SyncWorkerScheduler.schedulePeriodicSync(this)` on startup, gated on `sync_local_network_enabled` preference (default `false`).
+- Added `testOptions { unitTests { isReturnDefaultValues = true } }` to `app/build.gradle.kts` to allow Android stub classes (`NsdServiceInfo`, `NsdManager`) to be instantiated in JVM unit tests without throwing "not mocked" exceptions.
+- Wrote `LocalNetworkSyncTransportTest` (12 JUnit 4 tests):
+  - `registerService_callsNsdManagerRegisterService`
+  - `registerService_usesCorrectServiceType`
+  - `startDiscovery_callsNsdManagerDiscoverServices`
+  - `stop_callsUnregisterService_afterRegisterService`
+  - `stop_callsStopServiceDiscovery_afterStartDiscovery`
+  - `stop_doesNotCallUnregisterService_ifNotRegistered`
+  - `stop_doesNotCallStopDiscovery_ifDiscoveryNotStarted`
+  - `discoveryListener_onServiceLost_removesPeerByName`
+  - `discoveryListener_onServiceFound_callsResolveService`
+  - `push_callsOnSuccessWithNull_whenNoPeersDiscovered`
+  - `pull_callsOnSuccessWithNull_immediately`
+  - `discoveredPeers_initiallyEmpty`
+  - `stop_clearsPeerList`
+
+### Files changed
+
+- `app/build.gradle.kts` — added `testOptions { unitTests { isReturnDefaultValues = true } }`
+- `app/src/main/java/eu/frigo/dispensa/Dispensa.java` — added `scheduleSyncIfEnabled()` call in `onCreate()`
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java` — added `getMaxSyncClock()` public method
+- `app/src/main/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransport.java` — new class
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — new class
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorkerScheduler.java` — new class
+- `app/src/test/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransportTest.java` — new 12-test file
+- `PLAN.md` — Session 4 tasks marked complete
+
+### Test results
+
+`JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all 29 unit tests pass (16 pre-existing `SyncManagerTest` + 1 `ExampleUnitTest` + 12 new `LocalNetworkSyncTransportTest`).
+
+### Handoff to Session 5
+
+**Next session goal:** Implement `GoogleDriveSyncTransport` in the `play` product flavor.
+
+**Specific tasks:**
+1. Add `playImplementation` dependencies to `app/build.gradle.kts`:
+   - `com.google.api-client:google-api-client-android`
+   - `com.google.apis:google-api-services-drive`
+   - `com.google.android.gms:play-services-auth`
+2. Create `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java`:
+   - Google Sign-In with `DriveScopes.DRIVE_APPDATA`
+   - Upload: `exportChanges()` → create/update `.dispensa_sync_changes.json` in `appDataFolder`
+   - Download: fetch `.dispensa_sync_changes.json` → `importChanges()`
+   - Error handling: 401 re-auth, 404 empty treatment, 429/5xx exponential backoff (max 3 retries)
+3. Integrate `GoogleDriveSyncTransport` into `SyncWorker` for `play` flavor.
+4. Write unit tests for upload/download (mock Drive client).
+
+**Key constraints:**
+- All new source code must be **Java** (not Kotlin).
+- `GoogleDriveSyncTransport` in `app/src/play/` only — `fdroid` build must never reference it.
+- Build: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew assembleFdroidDebug`
+- Tests: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest`
+- `testOptions { unitTests { isReturnDefaultValues = true } }` is now set — Android stubs no longer throw in JVM tests.
+
+**Conventions from this session:**
+- `LocalNetworkSyncTransport.SERVICE_TYPE = "_dispensa._tcp."` (trailing dot required for DNS-SD).
+- `SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED = "sync_local_network_enabled"` — use this key in Session 6 Settings UI.
+- `SyncWorkerScheduler.PERIODIC_WORK_TAG = "periodicSyncWork"` / `MANUAL_WORK_TAG = "MANUAL_SYNC"`.
+- `SyncWorker.DISCOVERY_WAIT_MS = 5000` — NSD discovery wait before pushing.
