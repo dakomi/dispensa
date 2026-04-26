@@ -212,6 +212,23 @@
     <string name="hint_manage_locations">Click here to manage your storage locations</string>
     <string name="hint_manage_settings">Click here to import/export your products or manage your settings</string>
 
+    <!-- Sync Settings -->
+    <string name="pref_cat_sync_title">Sync</string>
+    <string name="pref_sync_local_network_title">Local network sync</string>
+    <string name="pref_sync_local_network_summary">Automatically sync with other devices on the same Wi-Fi network</string>
+    <string name="pref_sync_last_timestamp_title">Last sync</string>
+    <string name="pref_sync_last_timestamp_never">Never</string>
+    <string name="pref_sync_trigger_manual_title">Sync now</string>
+    <string name="pref_sync_trigger_manual_summary">Trigger an immediate sync with nearby devices</string>
+    <string name="pref_sync_drive_title">Google Drive sync</string>
+    <string name="pref_sync_drive_summary">Back up and sync your pantry via Google Drive</string>
+    <string name="pref_sync_drive_account_title">Google account</string>
+    <string name="pref_sync_drive_account_not_signed_in">Not signed in</string>
+    <string name="pref_sync_drive_sign_out_title">Sign out of Google</string>
+    <string name="pref_sync_drive_sign_out_summary">Remove Google account from this device</string>
+    <string name="notify_sync_triggered">Sync started</string>
+    <string name="notify_sync_signed_out">Signed out of Google</string>
+
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">No product found for this barcode</string>
     <string name="consume_product_confirm">Do you want to consume 1 of %1$s (Expiry: %2$s)?</string>

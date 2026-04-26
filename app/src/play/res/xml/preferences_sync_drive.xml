@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <CheckBoxPreference
+        app:key="sync_drive_enabled"
+        app:title="@string/pref_sync_drive_title"
+        app:summary="@string/pref_sync_drive_summary"
+        app:defaultValue="false"
+        app:iconSpaceReserved="false"/>
+
+    <Preference
+        app:key="sync_drive_account"
+        app:title="@string/pref_sync_drive_account_title"
+        app:selectable="false"
+        app:iconSpaceReserved="false"/>
+
+    <Preference
+        app:key="sync_drive_sign_out"
+        app:title="@string/pref_sync_drive_sign_out_title"
+        app:summary="@string/pref_sync_drive_sign_out_summary"
+        app:iconSpaceReserved="false"/>
+
+</PreferenceScreen>
