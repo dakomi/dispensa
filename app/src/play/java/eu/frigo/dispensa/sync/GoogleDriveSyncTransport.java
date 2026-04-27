@@ -369,7 +369,8 @@ public class GoogleDriveSyncTransport implements SyncTransport {
             }
 
             if (allChanges.isEmpty()) return null;
-            return GSON.toJson(new SyncBlob(allChanges)).getBytes(StandardCharsets.UTF_8);
+            // senderDeviceId is null for the merged household blob (multiple sources)
+            return GSON.toJson(new SyncBlob(null, allChanges)).getBytes(StandardCharsets.UTF_8);
         }
 
         /**

@@ -187,7 +187,7 @@ public class SyncManagerTest {
                         + "\"order_index\":0,\"is_default\":1,\"is_predefined\":1}",
                 3L, "device-b");
         byte[] blobBytes = makeBlobBytes(new Gson().toJson(new SyncBlob(
-                java.util.Arrays.asList(c1, c2))));
+                "test-device-b", java.util.Arrays.asList(c1, c2))));
 
         syncManager.importChanges(blobBytes);
 
@@ -201,7 +201,7 @@ public class SyncManagerTest {
 
     @Test
     public void importChanges_doesNothing_whenBlobIsEmpty() {
-        SyncBlob blob = new SyncBlob(new java.util.ArrayList<>());
+        SyncBlob blob = new SyncBlob(null, new java.util.ArrayList<>());
         byte[] blobBytes = new Gson().toJson(blob).getBytes(StandardCharsets.UTF_8);
 
         syncManager.importChanges(blobBytes);
@@ -359,7 +359,7 @@ public class SyncManagerTest {
     }
 
     private byte[] makeBlobBytes(SyncChange change) {
-        SyncBlob blob = new SyncBlob(java.util.Collections.singletonList(change));
+        SyncBlob blob = new SyncBlob("test-device-a", java.util.Collections.singletonList(change));
         return new Gson().toJson(blob).getBytes(StandardCharsets.UTF_8);
     }
 

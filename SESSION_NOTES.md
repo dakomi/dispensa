@@ -885,3 +885,70 @@ This plan would be implemented as Session 12.
   - `extractFolderIdFromInput(input)` in `SyncSettingsHelper` handles both bare IDs and full deep-link URIs — use this for any future input parsing.
   - `SyncSettingsHelper.handleHouseholdDeepLink(fragment, folderId)` must be a no-op in fdroid flavor to keep both flavors' public API in sync.
   - `SettingsActivity.extractHouseholdFolderIdFromIntent(intent)` uses hard-coded scheme/host strings `"dispensa"` / `"household"` — these match `HouseholdManager.DEEP_LINK_SCHEME` / `DEEP_LINK_HOST` but are not directly referenced to avoid importing play-flavor classes from `main`.
+
+---
+
+## Session 11 — Sharing Permission Management
+
+**Date:** 2026-04-27  
+**Goal:** Add a device allowlist for local-network sync so only explicitly trusted devices can exchange changes.
+
+### What was done
+
+- **Wire format enhanced:** Added `senderDeviceId: String` field to `SyncBlob`. `SyncManager.exportChanges()` now populates it with the local device UUID. Added `SyncManager.extractSenderDeviceId(byte[])` package-private static helper used by the transport layer to parse the ID without double-importing the blob.
+- **`SyncPermissionManager` created** (`eu.frigo.dispensa.sync`, main source set):
+  - Persists two `StringSet` keys to a private `SharedPreferences` file (`sync_permissions.xml`): trusted devices and pending devices.
+  - Public API: `isTrusted(id)`, `trust(id)`, `revoke(id)`, `markPending(id)`, `dismissPending(id)`, `getTrustedDeviceIds()`, `getPendingDeviceIds()`.
+  - Package-private `SharedPreferences` constructor for unit tests.
+- **`LocalNetworkSyncTransport` updated:**
+  - Production constructor now creates `SyncPermissionManager(context)` and chains to a new 5-parameter internal constructor.
+  - Existing 4-parameter test constructor delegates to the 5-parameter one with `null` (permission manager null = allow all, existing tests unchanged).
+  - `handleIncomingConnection()` now enforces trust: devices without `senderDeviceId` (old clients) are rejected with a warning; devices with an ID that is not in the trusted set are added to pending and receive an empty blob back; only trusted devices proceed to `importChanges()`.
+  - Extracted `writeEmptyBlob(DataOutputStream)` private helper.
+- **`ManageSyncDevicesFragment` created** (main source set, `eu.frigo.dispensa.ui`):
+  - Two sections: **Trusted devices** (each with a "Revoke" button) and **Pending devices** (each with "Approve" / "Dismiss" buttons).
+  - Device UUIDs are shown abbreviated to 8 characters.
+  - Uses `SyncPermissionManager` directly (no ViewModel needed for this small list).
+  - Layout: `fragment_manage_sync_devices.xml` — MaterialToolbar + ScrollView with a programmatically populated LinearLayout.
+- **`preferences.xml`:** added `sync_manage_devices` preference after `sync_local_scan_peers`.
+- **`SettingsFragment.onPreferenceTreeClick()`:** added case for `sync_manage_devices` → fragment replace to `ManageSyncDevicesFragment`, matching the `ManageLocationsFragment` pattern.
+- **Drive sharing info pref:** skipped — Session 12's `KEY_HOUSEHOLD_STATUS` already surfaces the sync mode in the UI; adding a redundant info pref would clutter the settings screen.
+- **`SyncManagerTest`:** updated 3 test usages of `new SyncBlob(...)` to pass `senderDeviceId` (constructor changed).
+- **`GoogleDriveSyncTransport.HouseholdDriveOperations.downloadSyncFile()`:** updated `new SyncBlob(...)` call — passes `null` for the merged household blob (multi-source, Drive sync bypasses the trust check).
+- Added 12 string resources each to `strings.xml` (en) and `strings.xml` (it).
+- Created `SyncPermissionManagerTest` (11 unit tests).
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncBlob.java` — added `senderDeviceId` field + updated constructor
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java` — populate `senderDeviceId` in `exportChanges()`; add `extractSenderDeviceId()` helper
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncPermissionManager.java` — new file
+- `app/src/main/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransport.java` — added `SyncPermissionManager` field + constructors; trust enforcement in `handleIncomingConnection()`; `writeEmptyBlob()` helper
+- `app/src/main/java/eu/frigo/dispensa/ui/ManageSyncDevicesFragment.java` — new file
+- `app/src/main/res/layout/fragment_manage_sync_devices.xml` — new file
+- `app/src/main/res/xml/preferences.xml` — added `sync_manage_devices`
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — `sync_manage_devices` navigation in `onPreferenceTreeClick()`
+- `app/src/main/res/values/strings.xml` — 12 new strings (en)
+- `app/src/main/res/values-it/strings.xml` — 12 new strings (it)
+- `app/src/test/java/eu/frigo/dispensa/sync/SyncPermissionManagerTest.java` — new file; 11 unit tests
+- `app/src/test/java/eu/frigo/dispensa/sync/SyncManagerTest.java` — updated 3 `SyncBlob` constructor calls
+- `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` — updated `SyncBlob` constructor call in `HouseholdDriveOperations`
+- `PLAN.md` — Session 11 tasks marked complete
+
+### Test results
+
+- 103 unit tests: all pass (`testFdroidDebugUnitTest` + `testPlayDebugUnitTest`)
+- Both flavors compile: `compileFdroidDebugJavaWithJavac` + `compilePlayDebugJavaWithJavac` BUILD SUCCESSFUL
+
+### Handoff to Session 13
+
+- Session 11 is now complete. Session 12 (Household Drive Sync) was already done.
+- **Remaining polish from Session 12:**
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link (requires `zxing` dependency).
+  - Household folder name lookup on status preference (show friendly name instead of folder ID).
+- **Session 11 device trust UX note:** When a user first enables local network sync, ALL other Dispensa devices will appear as "pending" until explicitly approved. This is intentional (strict trust model). Users must open Settings → Manage trusted devices to approve peers. Consider adding a notification or badge to the preference summary when new pending devices arrive.
+- **Conventions established this session:**
+  - `SyncPermissionManager` uses its own `SharedPreferences` file (`sync_permissions`) to avoid polluting the app-wide default prefs.
+  - `LocalNetworkSyncTransport`'s 4-parameter test constructor chains to the 5-parameter one with `null` permission manager — tests that don't need trust enforcement pass `null` and are unaffected.
+  - `SyncManager.extractSenderDeviceId(byte[])` is package-private static — called only by `LocalNetworkSyncTransport` from the same package.

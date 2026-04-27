@@ -138,6 +138,12 @@
             app:summary="@string/pref_sync_local_scan_peers_summary"
             app:iconSpaceReserved="false"/>
 
+        <Preference
+            app:key="sync_manage_devices"
+            app:title="@string/pref_sync_manage_devices_title"
+            app:summary="@string/pref_sync_manage_devices_summary"
+            app:iconSpaceReserved="false"/>
+
     </PreferenceCategory>
 
 </PreferenceScreen>

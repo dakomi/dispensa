@@ -265,19 +265,20 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
-### Session 11 — Sharing Permission Management
+### Session 11 — Sharing Permission Management ✅
 
 **Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
 
-- [ ] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
-- [ ] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob header and reject unknown devices (returns empty/error response); add `SyncPermissionManager` dependency
-- [ ] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke actions
-- [ ] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
-- [ ] Add Drive sharing info preference: explain that Drive sync shares data across all devices signed into the same Google account
-- [ ] Add string resources (en + it)
-- [ ] Write unit tests for `SyncPermissionManager`
+- [x] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
+- [x] Add `senderDeviceId` field to `SyncBlob`; populate in `SyncManager.exportChanges()`; add `SyncManager.extractSenderDeviceId()` helper
+- [x] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob and reject unknown devices (including those without an ID); add `SyncPermissionManager` dependency
+- [x] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke/dismiss actions
+- [x] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
+- [x] Drive sharing info preference superseded by Session 12's `KEY_HOUSEHOLD_STATUS`; skipped to avoid redundancy
+- [x] Add string resources (en + it)
+- [x] Write unit tests for `SyncPermissionManager` (11 tests)
 
-**Tests:** JUnit 4 unit tests for `SyncPermissionManager`.
+**Tests:** 103 unit tests pass (fdroid + play combined).
 
 ---
 

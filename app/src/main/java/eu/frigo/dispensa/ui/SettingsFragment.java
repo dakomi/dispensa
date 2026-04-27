@@ -38,6 +38,7 @@ import eu.frigo.dispensa.data.AppDatabase;
 import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
 import eu.frigo.dispensa.sync.SyncManager;
+import eu.frigo.dispensa.ui.ManageSyncDevicesFragment;
 import eu.frigo.dispensa.util.LocaleHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
 import eu.frigo.dispensa.work.SyncWorker;
@@ -441,6 +442,13 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 .addToBackStack(null)
                 .commit();
             return false;
+        }
+        if (preference.getKey() != null && preference.getKey().equals("sync_manage_devices")) {
+            getParentFragmentManager().beginTransaction()
+                .replace(android.R.id.content, new ManageSyncDevicesFragment())
+                .addToBackStack(null)
+                .commit();
+            return true;
         }
         return false;
     }

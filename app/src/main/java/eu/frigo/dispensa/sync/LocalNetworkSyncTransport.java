@@ -62,6 +62,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
     private final NsdManager nsdManager;
     private final WifiManager.MulticastLock multicastLock;  // may be null in tests
     private final SyncManager syncManager;
+    private final SyncPermissionManager permissionManager;  // may be null (allows all)
     private final ExecutorService executor;
 
     // ── Runtime state ─────────────────────────────────────────────────────────
@@ -87,7 +88,8 @@ public class LocalNetworkSyncTransport implements SyncTransport {
                 (NsdManager) context.getSystemService(Context.NSD_SERVICE),
                 buildMulticastLock(context),
                 syncManager,
-                Executors.newFixedThreadPool(8)
+                Executors.newFixedThreadPool(8),
+                new SyncPermissionManager(context)
         );
     }
 
@@ -100,10 +102,25 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             WifiManager.MulticastLock multicastLock,
             SyncManager syncManager,
             ExecutorService executor) {
+        this(nsdManager, multicastLock, syncManager, executor, null);
+    }
+
+    /**
+     * Full package-private constructor for unit tests — allows all dependencies to be injected.
+     *
+     * @param multicastLock     may be {@code null}
+     * @param permissionManager may be {@code null}; when {@code null} all connections are allowed
+     */
+    LocalNetworkSyncTransport(NsdManager nsdManager,
+            WifiManager.MulticastLock multicastLock,
+            SyncManager syncManager,
+            ExecutorService executor,
+            SyncPermissionManager permissionManager) {
         this.nsdManager = nsdManager;
         this.multicastLock = multicastLock;
         this.syncManager = syncManager;
         this.executor = executor;
+        this.permissionManager = permissionManager;
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -235,6 +252,25 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             byte[] peerBlob = new byte[peerBlobLen];
             in.readFully(peerBlob);
 
+            // Enforce device trust list when a SyncPermissionManager is present.
+            // Devices without a senderDeviceId (e.g. older clients) cannot be identified
+            // and are therefore rejected — they must upgrade to be approved.
+            if (permissionManager != null) {
+                String senderDeviceId = SyncManager.extractSenderDeviceId(peerBlob);
+                if (senderDeviceId == null) {
+                    Log.w(TAG, "Rejected sync from unidentifiable device (no senderDeviceId)");
+                    writeEmptyBlob(out);
+                    return;
+                }
+                if (!permissionManager.isTrusted(senderDeviceId)) {
+                    permissionManager.markPending(senderDeviceId);
+                    Log.d(TAG, "Rejected sync from untrusted device " + senderDeviceId
+                            + " — added to pending list");
+                    writeEmptyBlob(out);
+                    return;
+                }
+            }
+
             // Apply peer's changes to local database
             syncManager.importChanges(peerBlob);
 
@@ -247,6 +283,14 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         } catch (IOException e) {
             Log.w(TAG, "Error handling incoming connection", e);
         }
+    }
+
+    /** Sends an empty (zero-change) sync blob to the peer so it does not time out. */
+    private void writeEmptyBlob(DataOutputStream out) throws IOException {
+        byte[] emptyBlob = syncManager.exportChanges(syncManager.getMaxSyncClock());
+        out.writeInt(emptyBlob.length);
+        out.write(emptyBlob);
+        out.flush();
     }
 
     // ── TCP client (outbound exchange) ────────────────────────────────────────

@@ -245,6 +245,19 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="sync_scan_peers_dialog_title">Dispositivi Dispensa vicini</string>
     <string name="sync_scan_peers_none">Nessun dispositivo Dispensa trovato su questa rete.</string>
 
+    <!-- Device trust management (Session 11) -->
+    <string name="pref_sync_manage_devices_title">Gestisci dispositivi attendibili</string>
+    <string name="pref_sync_manage_devices_summary">Approva o revoca i dispositivi autorizzati alla sincronizzazione sulla rete locale</string>
+    <string name="title_manage_sync_devices">Dispositivi sync attendibili</string>
+    <string name="sync_devices_section_trusted">Dispositivi attendibili</string>
+    <string name="sync_devices_section_pending">Dispositivi in attesa</string>
+    <string name="sync_devices_trusted_empty">Nessun dispositivo attendibile. I dispositivi che richiedono la sincronizzazione appariranno nella sezione In attesa.</string>
+    <string name="sync_devices_pending_empty">Nessuna richiesta di connessione in attesa.</string>
+    <string name="sync_devices_device_id_label">Dispositivo %1$s</string>
+    <string name="sync_devices_action_approve">Approva</string>
+    <string name="sync_devices_action_revoke">Revoca</string>
+    <string name="sync_devices_action_dismiss">Ignora</string>
+
     <!-- Household sync (play flavor) -->
     <string name="pref_sync_drive_household_status_title">Stato nucleo familiare</string>
     <string name="pref_sync_drive_household_status_solo">Modalità singola — solo questo dispositivo sincronizza</string>

@@ -245,6 +245,19 @@
     <string name="sync_scan_peers_dialog_title">Nearby Dispensa devices</string>
     <string name="sync_scan_peers_none">No Dispensa devices found on this network.</string>
 
+    <!-- Device trust management (Session 11) -->
+    <string name="pref_sync_manage_devices_title">Manage trusted devices</string>
+    <string name="pref_sync_manage_devices_summary">Approve or revoke devices allowed to sync over local network</string>
+    <string name="title_manage_sync_devices">Trusted sync devices</string>
+    <string name="sync_devices_section_trusted">Trusted devices</string>
+    <string name="sync_devices_section_pending">Pending devices</string>
+    <string name="sync_devices_trusted_empty">No trusted devices yet. Devices that request sync will appear in the Pending section below.</string>
+    <string name="sync_devices_pending_empty">No pending connection requests.</string>
+    <string name="sync_devices_device_id_label">Device %1$s</string>
+    <string name="sync_devices_action_approve">Approve</string>
+    <string name="sync_devices_action_revoke">Revoke</string>
+    <string name="sync_devices_action_dismiss">Dismiss</string>
+
     <!-- Household sync (play flavor) -->
     <string name="pref_sync_drive_household_status_title">Household status</string>
     <string name="pref_sync_drive_household_status_solo">Solo mode — only this device syncs</string>
