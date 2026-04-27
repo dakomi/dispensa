@@ -1,6 +1,7 @@
 package eu.frigo.dispensa.ui;
 
 import android.accounts.Account;
+import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -442,10 +443,10 @@ public class SyncSettingsHelper {
 
     private static void createHousehold(PreferenceFragmentCompat fragment, String[] emails) {
         Context context = fragment.requireContext();
-        String email = PreferenceManager
+        String signedInEmail = PreferenceManager
                 .getDefaultSharedPreferences(context)
                 .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
-        if (email == null || email.isEmpty()) {
+        if (signedInEmail == null || signedInEmail.isEmpty()) {
             DebugLogger.w(TAG, "createHousehold: no signed-in account");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
@@ -453,7 +454,7 @@ public class SyncSettingsHelper {
             return;
         }
         DebugLogger.i(TAG, "createHousehold: starting, emailCount=" + emails.length);
-        Account account = new Account(email, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
+        Account account = new Account(signedInEmail, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
         Drive drive = HouseholdManager.buildDrive(context, account);
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -713,7 +714,7 @@ public class SyncSettingsHelper {
     public static void handleAuthorizationResult(PreferenceFragmentCompat fragment,
             ActivityResult result) {
         DebugLogger.i(TAG, "handleAuthorizationResult: resultCode=" + result.getResultCode());
-        if (result.getResultCode() != android.app.Activity.RESULT_OK
+        if (result.getResultCode() != Activity.RESULT_OK
                 || result.getData() == null) {
             DebugLogger.w(TAG, "Drive authorization cancelled (resultCode="
                     + result.getResultCode() + ")");

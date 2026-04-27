@@ -59,8 +59,8 @@ The sign-in flow requires:
    - **Developer contact information**: your email address
 4. Click **Save and Continue**.
 5. On the **Scopes** page click **Add or Remove Scopes** and add:
-   - `.../auth/drive.appdata` (for private sync file in App Data folder)
-   - `.../auth/drive.file` (for household shared folder)
+   - `https://www.googleapis.com/auth/drive.appdata` (for private sync file in App Data folder)
+   - `https://www.googleapis.com/auth/drive.file` (for household shared folder)
 6. Click **Save and Continue** twice, then **Back to Dashboard**.
 7. While in **Testing** mode you must add test users:
    - Click **Add Users** under the "Test users" section.
