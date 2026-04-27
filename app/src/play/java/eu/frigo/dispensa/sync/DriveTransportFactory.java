@@ -1,9 +1,7 @@
 package eu.frigo.dispensa.sync;
 
+import android.accounts.Account;
 import android.content.Context;
-
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 
 import androidx.preference.PreferenceManager;
 
@@ -31,6 +29,16 @@ public class DriveTransportFactory {
     /** Preference key that enables / disables Google Drive sync (play flavor only). */
     public static final String PREF_SYNC_DRIVE_ENABLED = "sync_drive_enabled";
 
+    /**
+     * Preference key for the signed-in Google account email (play flavor only).
+     * Set by {@link eu.frigo.dispensa.ui.SyncSettingsHelper} after a successful Credential
+     * Manager sign-in; cleared on sign-out.
+     */
+    public static final String PREF_SIGNED_IN_EMAIL = "sync_drive_signed_in_email";
+
+    /** Account type for Google accounts, used when constructing an {@link Account} object. */
+    public static final String GOOGLE_ACCOUNT_TYPE = "com.google";
+
     private DriveTransportFactory() {
         // utility class
     }
@@ -53,12 +61,16 @@ public class DriveTransportFactory {
             return null;
         }
 
-        GoogleSignInAccount signInAccount = GoogleSignIn.getLastSignedInAccount(context);
-        if (signInAccount == null || signInAccount.getAccount() == null) {
+        String email = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(PREF_SIGNED_IN_EMAIL, null);
+        if (email == null || email.isEmpty()) {
             DebugLogger.w("DriveTransportFactory",
                     "create: Drive sync enabled but no signed-in account — returning null");
             return null;
         }
+
+        Account account = new Account(email, GOOGLE_ACCOUNT_TYPE);
 
         String householdFolderId = HouseholdManager.getHouseholdFolderId(context);
         if (householdFolderId != null) {
@@ -70,7 +82,7 @@ public class DriveTransportFactory {
                 DebugLogger.i("DriveTransportFactory",
                         "create: returning household transport, folderId=" + householdFolderId
                                 + " deviceId=" + deviceId);
-                return new GoogleDriveSyncTransport(context, signInAccount.getAccount(),
+                return new GoogleDriveSyncTransport(context, account,
                         householdFolderId, deviceId);
             }
             DebugLogger.w("DriveTransportFactory",
@@ -78,7 +90,7 @@ public class DriveTransportFactory {
         }
 
         DebugLogger.i("DriveTransportFactory",
-                "create: returning solo transport, account=" + signInAccount.getEmail());
-        return new GoogleDriveSyncTransport(context, signInAccount.getAccount());
+                "create: returning solo transport, account=" + email);
+        return new GoogleDriveSyncTransport(context, account);
     }
 }

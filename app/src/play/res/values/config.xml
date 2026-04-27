@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <bool name="pref_enable_api">true</bool>
+    <!--
+        Web OAuth 2.0 Client ID from Google Cloud Console.
+        Replace this placeholder before building the play flavor.
+        See GOOGLE_CLOUD_SETUP.md for setup instructions.
+    -->
+    <string name="google_web_client_id" translatable="false">YOUR_WEB_CLIENT_ID</string>
 </resources>

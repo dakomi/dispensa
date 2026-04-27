@@ -24,7 +24,7 @@
 | Sync transport abstraction | `SyncTransport` interface | Allows LocalNetwork and GoogleDrive transports to be swapped or extended without modifying `SyncManager` |
 | Local network transport | Android `NsdManager` (mDNS) + TCP sockets | No external dependencies; works on both flavors; no server required |
 | Cloud transport | Google Drive REST API v3 + `appDataFolder` | `play` flavor only; private app folder avoids broad Drive permissions; uses `DriveScopes.DRIVE_APPDATA` |
-| Authentication (Drive) | Google Sign-In (`play-services-auth`) | `play` flavor only; standard Android pattern |
+| Authentication (Drive) | Android Credential Manager (`androidx.credentials` + `googleid`) | `play` flavor only; replaces deprecated `GoogleSignIn` API (removed H2 2025); `Identity.getAuthorizationClient()` handles Drive scopes |
 | Background scheduling | WorkManager `SyncWorker` | Reliable; already used in project for expiry checks |
 | Change serialization | JSON (Gson, already present) | Human-readable; Gson already a dependency |
 | Settings UI | `androidx.preference` | Already used in `SettingsFragment`; consistent UX |

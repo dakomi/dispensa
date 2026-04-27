@@ -85,17 +85,11 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     private Preference syncLastTimestampPreference;
     private Preference syncLocalPeersStatusPreference;
     private ListPreference languagePreference;
-    private ActivityResultLauncher<Intent> googleSignInLauncher;
     private ActivityResultLauncher<IntentSenderRequest> googleDriveAuthLauncher;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Register the Google Sign-In launcher before the fragment is started.
-        // The result is dispatched to SyncSettingsHelper (no-op in fdroid flavor).
-        googleSignInLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> SyncSettingsHelper.handleSignInResult(this, result, googleDriveAuthLauncher));
         // Register the Drive-scope authorization launcher (play flavor).
         // The consent screen is shown via Identity.getAuthorizationClient() after sign-in.
         googleDriveAuthLauncher = registerForActivityResult(
@@ -202,7 +196,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
 
         // Inject play-flavor Drive preferences (no-op in fdroid flavor)
         SyncSettingsHelper.setup(this);
-        SyncSettingsHelper.setSignInLauncher(this, googleSignInLauncher);
+        SyncSettingsHelper.setDriveAuthLauncher(this, googleDriveAuthLauncher);
 
         // Handle household deep-link if the activity received one
         Bundle args = getArguments();
@@ -422,7 +416,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             boolean enabled = sharedPreferences.getBoolean(key, false);
             // In play flavor: auto-launches sign-in if user is not yet authenticated.
             // In fdroid flavor: no-op.
-            SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleSignInLauncher, googleDriveAuthLauncher);
+            SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleDriveAuthLauncher);
         }
     }
     private void updateLanguagePreferenceSummary(String languageValue) {
