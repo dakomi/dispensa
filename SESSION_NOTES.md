@@ -952,3 +952,73 @@ This plan would be implemented as Session 11.
   - `SyncPermissionManager` uses its own `SharedPreferences` file (`sync_permissions`) to avoid polluting the app-wide default prefs.
   - `LocalNetworkSyncTransport`'s 4-parameter test constructor chains to the 5-parameter one with `null` permission manager — tests that don't need trust enforcement pass `null` and are unaffected.
   - `SyncManager.extractSenderDeviceId(byte[])` is package-private static — called only by `LocalNetworkSyncTransport` from the same package.
+
+---
+
+## Session 13 — Debug Logging Build
+
+**Date:** 2026-04-27  
+**Goal:** Add file-based debug logging across all features so the user can export a log for diagnosing sign-in and Drive sync issues.
+
+### What was done
+
+- **`DebugLogger.java`** created (`eu.frigo.dispensa.util`):
+  - Singleton file logger writing timestamped lines to `dispensa_debug.log` in `Context.getFilesDir()`.
+  - 1 MB automatic rotation (deletes and restarts when limit exceeded).
+  - All calls also pass through `android.util.Log` so logcat is unaffected.
+  - Public API: `init(context)`, `i()`, `w()`, `e()`, `getLogFile()`, `clear()`.
+- **`Dispensa.java`** — calls `DebugLogger.init(this)` first in `onCreate()`.
+- **`file_paths.xml`** — added `<files-path name="debug_logs" path="."/>` so `FileProvider` can serve the log file from `filesDir`.
+- **Debug preferences** added to `preferences.xml`:
+  - `pref_cat_debug` category ("Debug").
+  - `pref_debug_export_log` — shares `dispensa_debug.log` via `ACTION_SEND` + `FileProvider`.
+  - `pref_debug_clear_log` — calls `DebugLogger.clear()` and shows a Toast.
+- **`SettingsFragment.java`** — wires both debug prefs in `onCreatePreferences()`; `exportDebugLog()` method handles `FileProvider` URI creation and the share chooser; added `FileProvider`, `Uri`, and `DebugLogger` imports.
+- **DebugLogger calls added to all features:**
+  - `SyncSettingsHelper` (play) — sign-in launch, sign-in result (with status code on failure), Drive toggle, household create/join, sign-out, test connection.
+  - `GoogleDriveSyncTransport` — push/pull start, byte counts, errors.
+  - `DriveTransportFactory` — each routing branch (disabled, no account, household, solo).
+  - `HouseholdManager` — `createHousehold`, `grantAccess`, `verifyAndJoin` (all branches), `clearHouseholdFolderId`.
+  - `LocalNetworkSyncTransport` — `start()`, `stop()`, `push()`, `handleIncomingConnection()` (with trust check outcomes), NSD registration and discovery listeners, service resolve.
+  - `SyncManager` — `exportChanges()` (change count + byte count), `importChanges()` (sender device ID, change count, transaction commit).
+  - `SyncWorker` — discovery wait start/end with peer count, export byte count, push outcome, Drive transport availability, Drive push/import outcomes, errors.
+  - `SyncPermissionManager` — `trust()`, `revoke()`, `markPending()`, `dismissPending()`.
+- **String resources** (en + it): `pref_cat_debug_title`, `pref_debug_export_log_title/summary`, `pref_debug_clear_log_title/summary`, `notify_debug_log_empty`, `notify_debug_log_cleared`, `notify_debug_log_share_subject`, `notify_debug_log_share_chooser`, `notify_debug_log_share_failed`.
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/util/DebugLogger.java` — new file
+- `app/src/main/java/eu/frigo/dispensa/Dispensa.java` — `DebugLogger.init(this)` in `onCreate()`
+- `app/src/main/res/xml/file_paths.xml` — added `files-path` entry for log file
+- `app/src/main/res/xml/preferences.xml` — added `pref_cat_debug` with export + clear prefs
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — wired debug prefs; added `exportDebugLog()` method
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncManager.java` — added `TAG` constant + DebugLogger calls
+- `app/src/main/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransport.java` — DebugLogger calls throughout
+- `app/src/main/java/eu/frigo/dispensa/sync/SyncPermissionManager.java` — DebugLogger calls in trust management methods
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — DebugLogger calls throughout sync cycle
+- `app/src/main/res/values/strings.xml` — 10 new English strings
+- `app/src/main/res/values-it/strings.xml` — 10 new Italian strings
+- `app/src/play/java/eu/frigo/dispensa/sync/DriveTransportFactory.java` — DebugLogger routing logs
+- `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` — DebugLogger push/pull logs
+- `app/src/play/java/eu/frigo/dispensa/sync/HouseholdManager.java` — DebugLogger Drive API logs
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — DebugLogger sign-in + household logs
+- `PLAN.md` — Session 13 tasks added and marked complete
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all tests pass.
+- `compileFdroidDebugJavaWithJavac` — BUILD SUCCESSFUL.
+- `compilePlayDebugJavaWithJavac` — BUILD SUCCESSFUL.
+
+### Handoff to Session 14
+
+- **Debug log is ready.** The user should install the play build, reproduce the sign-in issue, then go to Settings → Debug → Export debug log and share the file.
+- **Known issue to diagnose:** Tapping "Sign in with Google" returns the user to the home screen instead of completing sign-in. The `handleSignInResult()` log will capture the `resultCode` and any `ApiException` status code — the most likely causes are:
+  1. SHA-1 fingerprint mismatch in Google Cloud Console (debug keystore not registered).
+  2. Missing OAuth 2.0 client ID in `google-services.json`.
+  3. `RESULT_CANCELED` (resultCode=0) — user pressed back, or the account picker was dismissed automatically.
+- **Google Drive sync checkbox opens account picker but nothing happens:** This is consistent with `RESULT_OK` being returned but `getSignedInAccountFromIntent` throwing `ApiException`. The log's `handleSignInResult` entry will show the exact status code.
+- **Conventions established this session:**
+  - `DebugLogger.init(Context)` must be called once from `Application.onCreate()` before any other component starts — it is idempotent but not thread-safe at init time.
+  - All DebugLogger calls also invoke the corresponding `android.util.Log` method — both channels are always active, never use DebugLogger as a replacement for Log.
+  - The log file path is `context.getFilesDir()/dispensa_debug.log`. The `FileProvider` authority is `eu.frigo.dispensa.fileprovider`.

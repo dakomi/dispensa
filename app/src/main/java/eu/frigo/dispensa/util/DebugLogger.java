@@ -35,7 +35,7 @@ public final class DebugLogger {
     /** Name of the log file stored in {@link Context#getFilesDir()}. */
     public static final String LOG_FILE_NAME = "dispensa_debug.log";
 
-    /** Maximum log file size before it is truncated (1 MB). */
+    /** Maximum log file size before it is truncated (1 MiB). */
     private static final long MAX_LOG_SIZE_BYTES = 1024L * 1024L;
 
     private static final SimpleDateFormat DATE_FORMAT =

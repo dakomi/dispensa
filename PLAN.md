@@ -302,3 +302,27 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Write unit tests for `SyncPermissionManager` (11 tests)
 
 **Tests:** 103 unit tests pass (fdroid + play combined).
+
+---
+
+### Session 13 — Debug Logging Build ✅
+
+**Goal:** Create a file-based debug logger so the user can export a log file to help diagnose sign-in and Drive sync issues.
+
+- [x] Create `eu.frigo.dispensa.util.DebugLogger` — singleton file logger (writes to `dispensa_debug.log` in `filesDir`; 1 MB rotation; also calls `android.util.Log`)
+- [x] Init `DebugLogger` in `Dispensa.java` Application `onCreate()`
+- [x] Update `file_paths.xml` — add `<files-path>` entry so `FileProvider` can share the log file
+- [x] Add `pref_cat_debug` preference category to `preferences.xml` with two prefs: `pref_debug_export_log` and `pref_debug_clear_log`
+- [x] Wire both prefs in `SettingsFragment` — export shares via `ACTION_SEND` + `FileProvider`; clear calls `DebugLogger.clear()`
+- [x] Add DebugLogger calls to `SyncSettingsHelper` (play) — sign-in launch/result, Drive toggle, household create/join, sign-out, test connection
+- [x] Add DebugLogger calls to `GoogleDriveSyncTransport` — push/pull outcomes
+- [x] Add DebugLogger calls to `DriveTransportFactory` — routing decisions (disabled / no account / solo / household)
+- [x] Add DebugLogger calls to `HouseholdManager` — createHousehold, grantAccess, verifyAndJoin, clearHouseholdFolderId
+- [x] Add DebugLogger calls to `LocalNetworkSyncTransport` — start/stop, push, handleIncomingConnection, NSD registration/discovery callbacks, resolve
+- [x] Add DebugLogger calls to `SyncManager` — exportChanges, importChanges
+- [x] Add DebugLogger calls to `SyncWorker` — full sync cycle (local + Drive)
+- [x] Add DebugLogger calls to `SyncPermissionManager` — trust/revoke/markPending/dismissPending
+- [x] Add string resources (en + it)
+- [x] Both flavors compile; all unit tests pass
+
+**Tests:** All unit tests pass (fdroid + play); both flavors BUILD SUCCESSFUL.

@@ -60,6 +60,7 @@ public class SyncPermissionManager {
      */
     public void trust(String deviceId) {
         if (deviceId == null) return;
+        DebugLogger.i("SyncPermissionManager", "trust: " + deviceId);
         Set<String> trusted = new HashSet<>(getTrustedDeviceIds());
         Set<String> pending = new HashSet<>(getPendingDeviceIds());
         trusted.add(deviceId);
@@ -77,6 +78,7 @@ public class SyncPermissionManager {
      */
     public void revoke(String deviceId) {
         if (deviceId == null) return;
+        DebugLogger.i("SyncPermissionManager", "revoke: " + deviceId);
         Set<String> trusted = new HashSet<>(getTrustedDeviceIds());
         trusted.remove(deviceId);
         prefs.edit().putStringSet(PREF_TRUSTED, trusted).apply();
@@ -88,6 +90,7 @@ public class SyncPermissionManager {
      */
     public void markPending(String deviceId) {
         if (deviceId == null || isTrusted(deviceId)) return;
+        DebugLogger.i("SyncPermissionManager", "markPending: " + deviceId);
         Set<String> pending = new HashSet<>(getPendingDeviceIds());
         pending.add(deviceId);
         prefs.edit().putStringSet(PREF_PENDING, pending).apply();
@@ -99,6 +102,7 @@ public class SyncPermissionManager {
      */
     public void dismissPending(String deviceId) {
         if (deviceId == null) return;
+        DebugLogger.i("SyncPermissionManager", "dismissPending: " + deviceId);
         Set<String> pending = new HashSet<>(getPendingDeviceIds());
         pending.remove(deviceId);
         prefs.edit().putStringSet(PREF_PENDING, pending).apply();

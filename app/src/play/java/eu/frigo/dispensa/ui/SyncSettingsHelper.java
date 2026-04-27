@@ -610,7 +610,6 @@ public class SyncSettingsHelper {
                     context.getString(R.string.notify_sync_signed_out),
                     Toast.LENGTH_SHORT).show();
             DebugLogger.i(TAG, "signOut: UI updated, signed out of Google.");
-            Log.d(TAG, "Signed out of Google.");
         });
     }
 }

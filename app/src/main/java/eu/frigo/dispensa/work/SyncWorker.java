@@ -75,7 +75,7 @@ public class SyncWorker extends Worker {
         AppDatabase db = AppDatabase.getDatabase(ctx);
         SyncManager syncManager = new SyncManager(db, ctx);
         LocalNetworkSyncTransport transport = new LocalNetworkSyncTransport(ctx, syncManager);
-        DebugLogger.i(TAG, "doWork: starting sync, deviceId=" + syncManager.getLocalDeviceId());
+        DebugLogger.i(TAG, "doWork: starting sync");
 
         try {
             transport.start();

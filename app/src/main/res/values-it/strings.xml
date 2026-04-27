@@ -294,4 +294,16 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="consume_success">Prodotto consumato correttamente</string>
     <string name="consume_scan_description">Scansiona prodotto da consumare</string>
     <string name="language_german">Tedesco</string>
+
+    <!-- Debug log -->
+    <string name="pref_cat_debug_title">Debug</string>
+    <string name="pref_debug_export_log_title">Esporta log di debug</string>
+    <string name="pref_debug_export_log_summary">Condividi il file di log dell\'app per diagnosticare i problemi</string>
+    <string name="pref_debug_clear_log_title">Cancella log di debug</string>
+    <string name="pref_debug_clear_log_summary">Elimina il file di log corrente e ripartire da zero</string>
+    <string name="notify_debug_log_empty">Il log di debug è vuoto</string>
+    <string name="notify_debug_log_cleared">Log di debug cancellato</string>
+    <string name="notify_debug_log_share_subject">Log di debug Dispensa</string>
+    <string name="notify_debug_log_share_chooser">Condividi log di debug tramite…</string>
+    <string name="notify_debug_log_share_failed">Condivisione log di debug non riuscita</string>
 </resources>
