@@ -1,7 +1,5 @@
 package eu.frigo.dispensa.ui;
 
-import android.content.Intent;
-
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
@@ -24,12 +22,7 @@ public class SyncSettingsHelper {
     public static void refreshAccountSummary(PreferenceFragmentCompat fragment) {}
 
     /** No-op — Drive sync is not available in the F-Droid build. */
-    public static void setSignInLauncher(PreferenceFragmentCompat fragment,
-            ActivityResultLauncher<Intent> launcher) {}
-
-    /** No-op — Drive sync is not available in the F-Droid build. */
-    public static void handleSignInResult(PreferenceFragmentCompat fragment,
-            ActivityResult result,
+    public static void setDriveAuthLauncher(PreferenceFragmentCompat fragment,
             ActivityResultLauncher<IntentSenderRequest> authLauncher) {}
 
     /** No-op — Drive sync is not available in the F-Droid build. */
@@ -38,8 +31,7 @@ public class SyncSettingsHelper {
 
     /** No-op — Drive sync is not available in the F-Droid build. */
     public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
-            boolean enabled, ActivityResultLauncher<Intent> signInLauncher,
-            ActivityResultLauncher<IntentSenderRequest> authLauncher) {}
+            boolean enabled, ActivityResultLauncher<IntentSenderRequest> authLauncher) {}
 
     /** No-op — household deep-links are not supported in the F-Droid build. */
     public static void handleHouseholdDeepLink(PreferenceFragmentCompat fragment,

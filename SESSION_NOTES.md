@@ -1087,3 +1087,63 @@ This plan would be implemented as Session 11.
   - Sign-in and Drive scope authorization are two distinct flows. `launchSignIn` only gets the Google account (email); `launchDriveAuthorization` requests Drive scopes via `Identity.getAuthorizationClient().authorize()`.
   - `SettingsFragment` must register both `googleSignInLauncher` (`StartActivityForResult`) and `googleDriveAuthLauncher` (`StartIntentSenderForResult`) in `onCreate()` before the fragment starts.
   - Drive sync is enabled (`sync_drive_enabled = true`) only after `completeDriveAuthorization()` is called — never directly in the sign-in result handler.
+
+---
+
+## Session 15 — Credential Manager Migration + Google Cloud Setup Guide
+
+**Date:** 2026-04-27  
+**Goal:** Replace deprecated `GoogleSignIn`/`GoogleSignInClient` with the modern Android Credential Manager API and provide a complete Google Cloud Console setup guide.
+
+### What was done
+
+- **Root cause confirmed:** `statusCode=10 (DEVELOPER_ERROR)` in both log files is caused by (a) the debug build using `eu.frigo.dispensa.debug` (via `applicationIdSuffix`) with no matching Android OAuth Client ID registered, and (b) the `GoogleSignInClient` legacy API being deprecated/removed in H2 2025.
+
+- **Credential Manager migration (play flavor):**
+  - Added three new play-flavor dependencies: `androidx.credentials:credentials:1.6.0`, `androidx.credentials:credentials-play-services-auth:1.6.0`, `com.google.android.libraries.identity.googleid:googleid:1.1.0`.
+  - `SyncSettingsHelper` (play): removed all `GoogleSignIn`/`GoogleSignInAccount`/`GoogleSignInOptions`/`GoogleSignInClient` usage; replaced `launchSignIn()` with Credential Manager `getCredentialAsync()` using `GetGoogleIdOption`; removed `handleSignInResult()` (replaced by a callback); added `handleCredentialResponse()` private helper; updated `refreshSignInState()` to read from SharedPreferences instead of `GoogleSignIn.getLastSignedInAccount()`; updated `signOut()` to use `CredentialManager.clearCredentialStateAsync()`; updated `createHousehold()` and `joinHousehold()` to construct `Account` from stored email.
+  - Renamed `setSignInLauncher()` → `setDriveAuthLauncher()` (now takes `authLauncher` only; sign-in is fully internal).
+  - Simplified `onDriveEnabledChanged()` — removed `signInLauncher` param (no longer needed).
+  - `DriveTransportFactory` (play): added `PREF_SIGNED_IN_EMAIL` + `GOOGLE_ACCOUNT_TYPE` constants; replaced `GoogleSignIn.getLastSignedInAccount()` with SharedPreferences email lookup + `new Account(email, "com.google")`.
+  - `SyncSettingsHelper` (fdroid stub): removed `handleSignInResult`, `setSignInLauncher` stubs; added `setDriveAuthLauncher` stub; updated `onDriveEnabledChanged` to remove `signInLauncher` param.
+  - `SettingsFragment`: removed `googleSignInLauncher` field and its `registerForActivityResult` call; updated call sites to use new method signatures.
+
+- **Web Client ID placeholder:** Added `google_web_client_id` string resource to `app/src/play/res/values/config.xml` with value `YOUR_WEB_CLIENT_ID` and a comment pointing to `GOOGLE_CLOUD_SETUP.md`.
+
+- **`GOOGLE_CLOUD_SETUP.md`** created at repository root — 7-step guide covering: create Cloud project, enable Drive API, configure OAuth consent screen (with Drive scopes), create Web Client ID, create Android Client IDs (debug + release), add Web Client ID to `config.xml`, and build/test. Includes troubleshooting table and notes for upstream integration.
+
+- **`PLAN.md`** architecture table updated: Authentication row updated to Credential Manager.
+
+### Files changed
+
+- `gradle/libs.versions.toml` — added `credentialsVersion`, `googleidVersion` versions; added `credentials`, `credentials-play-services-auth`, `googleid` library entries
+- `app/build.gradle.kts` — added three play-flavor credentials + googleid dependencies
+- `app/src/play/res/values/config.xml` — added `google_web_client_id` placeholder string
+- `app/src/play/java/eu/frigo/dispensa/sync/DriveTransportFactory.java` — `PREF_SIGNED_IN_EMAIL`, `GOOGLE_ACCOUNT_TYPE` constants; replaced `GoogleSignIn` with SharedPreferences + `Account`
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — full Credential Manager migration
+- `app/src/fdroid/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — updated stubs to match new API
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — removed `googleSignInLauncher`; updated call sites
+- `GOOGLE_CLOUD_SETUP.md` — new file; full Google Cloud Console setup guide
+- `PLAN.md` — authentication architecture decision updated
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**.
+- `./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all tests pass.
+
+### Handoff to Session 16
+
+- **Before building the play APK**, replace `YOUR_WEB_CLIENT_ID` in `app/src/play/res/values/config.xml` following `GOOGLE_CLOUD_SETUP.md`.
+- **Expected new sign-in flow:** Settings → Sign in with Google → Credential Manager bottom sheet appears → user selects account → Drive scope consent screen (if not yet granted) → Drive sync enabled with Toast confirmation.
+- **Sign-in no longer uses an `ActivityResultLauncher<Intent>`** — the Credential Manager flow is callback-based and requires no activity result registration for the sign-in step itself.
+- **`PREF_SIGNED_IN_EMAIL`** (`sync_drive_signed_in_email`) is the source of truth for "who is signed in". `DriveTransportFactory.create()` reads this key; `SyncSettingsHelper` writes/clears it. `GoogleSignIn.getLastSignedInAccount()` is no longer called anywhere.
+- **Outstanding polish items** (carried forward):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
+- **Conventions established this session:**
+  - Signed-in email is persisted in default SharedPreferences under key `DriveTransportFactory.PREF_SIGNED_IN_EMAIL`. Always read/write via this constant.
+  - `Account` objects for Drive API calls are always constructed as `new Account(email, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE)` — never obtained from `GoogleSignIn`.
+  - The Web Client ID (`google_web_client_id` string resource) must be replaced before the play flavor will work. It is intentionally left as a placeholder in the repo so each fork/release keystore owner supplies their own.
+  - `setDriveAuthLauncher()` replaces the old `setSignInLauncher()` — it wires the sign-in preference button and passes the `authLauncher` to `launchSignIn()`.

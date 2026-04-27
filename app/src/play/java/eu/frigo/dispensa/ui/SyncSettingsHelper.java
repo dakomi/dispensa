@@ -1,8 +1,7 @@
 package eu.frigo.dispensa.ui;
 
-import android.app.Activity;
+import android.accounts.Account;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
@@ -14,6 +13,14 @@ import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.appcompat.app.AlertDialog;
+import androidx.credentials.ClearCredentialStateRequest;
+import androidx.credentials.CredentialManager;
+import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.GetCredentialRequest;
+import androidx.credentials.GetCredentialResponse;
+import androidx.credentials.exceptions.ClearCredentialException;
+import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.NoCredentialException;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
@@ -22,13 +29,10 @@ import androidx.preference.PreferenceScreen;
 import com.google.android.gms.auth.api.identity.AuthorizationRequest;
 import com.google.android.gms.auth.api.identity.AuthorizationResult;
 import com.google.android.gms.auth.api.identity.Identity;
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
-import com.google.android.gms.tasks.Task;
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 
@@ -57,7 +61,7 @@ import eu.frigo.dispensa.util.DebugLogger;
  *
  * <p>Call {@link #setup(PreferenceFragmentCompat)} after
  * {@code setPreferencesFromResource()} in {@code onCreatePreferences()}, then call
- * {@link #setSignInLauncher(PreferenceFragmentCompat, ActivityResultLauncher)} immediately
+ * {@link #setDriveAuthLauncher(PreferenceFragmentCompat, ActivityResultLauncher)} immediately
  * after to wire the sign-in button.
  */
 public class SyncSettingsHelper {
@@ -173,81 +177,29 @@ public class SyncSettingsHelper {
         refreshSignInState(fragment);
     }
 
-    // ── Sign-in launcher ──────────────────────────────────────────────────────
+    // ── Drive auth launcher ───────────────────────────────────────────────────
 
     /**
-     * Wires the {@code sync_drive_sign_in} preference to launch a Google Sign-In intent
-     * via the provided {@code launcher}.  Call this after {@link #setup} so that the
+     * Wires the {@code sync_drive_sign_in} preference to launch the Google Sign-In flow
+     * via the Android Credential Manager API.  Call this after {@link #setup} so that the
      * preference already exists in the hierarchy.
      *
-     * @param fragment the host fragment
-     * @param launcher an {@code ActivityResultLauncher<Intent>} registered in the fragment's
-     *                 {@code onCreate()} via {@code registerForActivityResult}
+     * <p>On a successful sign-in the email is persisted in SharedPreferences and Drive scope
+     * authorization is requested immediately via {@code authLauncher}.
+     *
+     * @param fragment    the host fragment
+     * @param authLauncher an {@code ActivityResultLauncher<IntentSenderRequest>} registered in
+     *                    the fragment's {@code onCreate()} via {@code registerForActivityResult}
+     *                    — used for the Drive scope consent screen shown after sign-in
      */
-    public static void setSignInLauncher(PreferenceFragmentCompat fragment,
-            ActivityResultLauncher<Intent> launcher) {
+    public static void setDriveAuthLauncher(PreferenceFragmentCompat fragment,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
         Preference signInPref = fragment.findPreference(KEY_SIGN_IN);
         if (signInPref != null) {
             signInPref.setOnPreferenceClickListener(pref -> {
-                launchSignIn(fragment.requireContext(), launcher);
+                launchSignIn(fragment, authLauncher);
                 return true;
             });
-        }
-    }
-
-    /**
-     * Handles the result returned from the Google Sign-In activity.  On success the
-     * account summary is refreshed and Drive scope authorization is launched as a
-     * separate step (required by the Identity API since play-services-auth 21.x).
-     *
-     * @param fragment   the host fragment
-     * @param result     the {@link ActivityResult} delivered to the sign-in launcher callback
-     * @param authLauncher the {@code ActivityResultLauncher<IntentSenderRequest>} used to show
-     *                   the Drive scope consent screen if the user has not yet granted it
-     */
-    public static void handleSignInResult(PreferenceFragmentCompat fragment,
-            ActivityResult result,
-            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
-        DebugLogger.i(TAG, "handleSignInResult: resultCode=" + result.getResultCode()
-                + " hasData=" + (result.getData() != null));
-        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-            DebugLogger.w(TAG, "Sign-in cancelled or failed (resultCode=" + result.getResultCode() + ")");
-            // When the sign-in activity returns data even on failure, extract the ApiException
-            // to get the specific status code (e.g. 12500=SIGN_IN_FAILED, 12501=SIGN_IN_CANCELLED).
-            // This is essential for diagnosing OAuth configuration problems.
-            if (result.getData() != null) {
-                try {
-                    GoogleSignIn.getSignedInAccountFromIntent(result.getData())
-                            .getResult(ApiException.class);
-                } catch (ApiException e) {
-                    DebugLogger.w(TAG, "Sign-in ApiException: statusCode=" + e.getStatusCode()
-                            + " message=" + e.getStatus().getStatusMessage());
-                }
-            }
-            Toast.makeText(fragment.requireContext(),
-                    fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
-                    Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Task<GoogleSignInAccount> task =
-                GoogleSignIn.getSignedInAccountFromIntent(result.getData());
-        try {
-            GoogleSignInAccount account = task.getResult(ApiException.class);
-            DebugLogger.i(TAG, "Sign-in successful: email=" + account.getEmail()
-                    + " id=" + account.getId()
-                    + " grantedScopes=" + account.getGrantedScopes());
-
-            // Update the UI to show the signed-in email, then request Drive scopes.
-            // Drive sync is enabled only after the authorization step succeeds.
-            refreshSignInState(fragment);
-            launchDriveAuthorization(fragment, authLauncher);
-
-        } catch (ApiException e) {
-            DebugLogger.e(TAG, "Google Sign-In failed: statusCode=" + e.getStatusCode()
-                    + " statusMessage=" + e.getStatus().getStatusMessage(), e);
-            Toast.makeText(fragment.requireContext(),
-                    fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
-                    Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -263,17 +215,16 @@ public class SyncSettingsHelper {
      *
      * @param fragment     the host fragment
      * @param enabled      the new value of the Drive-sync toggle
-     * @param signInLauncher the sign-in launcher registered in the fragment
-     * @param authLauncher   the Drive-authorization launcher registered in the fragment
+     * @param authLauncher the Drive-authorization launcher registered in the fragment
      */
     public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
-            boolean enabled, ActivityResultLauncher<Intent> signInLauncher,
-            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
+            boolean enabled, ActivityResultLauncher<IntentSenderRequest> authLauncher) {
         DebugLogger.i(TAG, "onDriveEnabledChanged: enabled=" + enabled);
         if (enabled) {
-            GoogleSignInAccount account =
-                    GoogleSignIn.getLastSignedInAccount(fragment.requireContext());
-            if (account == null) {
+            String email = PreferenceManager
+                    .getDefaultSharedPreferences(fragment.requireContext())
+                    .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+            if (email == null || email.isEmpty()) {
                 DebugLogger.w(TAG, "Drive enabled but no signed-in account — launching sign-in");
                 // Revert the toggle and prompt the user to sign in first
                 PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
@@ -285,7 +236,7 @@ public class SyncSettingsHelper {
                 if (drivePref instanceof androidx.preference.CheckBoxPreference) {
                     ((androidx.preference.CheckBoxPreference) drivePref).setChecked(false);
                 }
-                launchSignIn(fragment.requireContext(), signInLauncher);
+                launchSignIn(fragment, authLauncher);
             } else {
                 // Account present — verify Drive scope authorization.
                 // The toggle is left as-is; onDriveAuthorizationFailed() reverts it on error.
@@ -310,12 +261,14 @@ public class SyncSettingsHelper {
 
     /**
      * Updates the visibility of sign-in, account, and sign-out preferences to match the
-     * current Google Sign-In state.
+     * current sign-in state (read from SharedPreferences).
      */
     static void refreshSignInState(PreferenceFragmentCompat fragment) {
         Context context = fragment.requireContext();
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
-        boolean signedIn = (account != null && account.getEmail() != null);
+        String email = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+        boolean signedIn = (email != null && !email.isEmpty());
 
         Preference signInPref  = fragment.findPreference(KEY_SIGN_IN);
         Preference accountPref = fragment.findPreference(KEY_ACCOUNT);
@@ -333,7 +286,7 @@ public class SyncSettingsHelper {
         if (accountPref != null) {
             accountPref.setVisible(signedIn);
             if (signedIn) {
-                accountPref.setSummary(account.getEmail());
+                accountPref.setSummary(email);
             }
         }
 
@@ -489,8 +442,10 @@ public class SyncSettingsHelper {
 
     private static void createHousehold(PreferenceFragmentCompat fragment, String[] emails) {
         Context context = fragment.requireContext();
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
-        if (account == null || account.getAccount() == null) {
+        String email = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+        if (email == null || email.isEmpty()) {
             DebugLogger.w(TAG, "createHousehold: no signed-in account");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
@@ -498,15 +453,16 @@ public class SyncSettingsHelper {
             return;
         }
         DebugLogger.i(TAG, "createHousehold: starting, emailCount=" + emails.length);
-        Drive drive = HouseholdManager.buildDrive(context, account.getAccount());
+        Account account = new Account(email, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
+        Drive drive = HouseholdManager.buildDrive(context, account);
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             try {
                 String folderId = HouseholdManager.createHousehold(drive, context);
                 DebugLogger.i(TAG, "createHousehold: folder created, id=" + folderId);
-                for (String email : emails) {
-                    String trimmed = email.trim();
+                for (String memberEmail : emails) {
+                    String trimmed = memberEmail.trim();
                     if (!trimmed.isEmpty()) {
                         HouseholdManager.grantAccess(drive, folderId, trimmed);
                         DebugLogger.i(TAG, "createHousehold: granted access to " + trimmed);
@@ -529,8 +485,10 @@ public class SyncSettingsHelper {
 
     private static void joinHousehold(PreferenceFragmentCompat fragment, String folderId) {
         Context context = fragment.requireContext();
-        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
-        if (account == null || account.getAccount() == null) {
+        String email = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+        if (email == null || email.isEmpty()) {
             DebugLogger.w(TAG, "joinHousehold: no signed-in account");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
@@ -538,7 +496,8 @@ public class SyncSettingsHelper {
             return;
         }
         DebugLogger.i(TAG, "joinHousehold: attempting folderId=" + folderId);
-        Drive drive = HouseholdManager.buildDrive(context, account.getAccount());
+        Account account = new Account(email, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
+        Drive drive = HouseholdManager.buildDrive(context, account);
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
@@ -595,6 +554,105 @@ public class SyncSettingsHelper {
                 .setView(linkView)
                 .setPositiveButton(R.string.ok, null)
                 .show();
+    }
+
+    // ── Sign-in (Credential Manager) ──────────────────────────────────────────
+
+    /**
+     * Launches the Google Sign-In flow using the Android Credential Manager API.
+     *
+     * <p>Attempts to sign in with a previously authorized account first
+     * ({@code filterByAuthorizedAccounts = true}); if none is found, falls back to the
+     * full account picker ({@code filterByAuthorizedAccounts = false}).
+     *
+     * <p>On success the signed-in email is stored in SharedPreferences and Drive scope
+     * authorization is requested immediately via {@code authLauncher}.
+     *
+     * @param fragment    the host fragment
+     * @param authLauncher the launcher for the Drive scope consent screen
+     */
+    private static void launchSignIn(PreferenceFragmentCompat fragment,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
+        DebugLogger.i(TAG, "launchSignIn: initiating Credential Manager sign-in");
+        doLaunchSignIn(fragment, authLauncher, /* filterByAuthorized= */ true);
+    }
+
+    private static void doLaunchSignIn(PreferenceFragmentCompat fragment,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher,
+            boolean filterByAuthorized) {
+        Context context = fragment.requireContext();
+        String webClientId = context.getString(R.string.google_web_client_id);
+
+        GetGoogleIdOption googleIdOption = new GetGoogleIdOption.Builder()
+                .setServerClientId(webClientId)
+                .setFilterByAuthorizedAccounts(filterByAuthorized)
+                .setAutoSelectEnabled(false)
+                .build();
+
+        GetCredentialRequest request = new GetCredentialRequest.Builder()
+                .addCredentialOption(googleIdOption)
+                .build();
+
+        CredentialManager credentialManager = CredentialManager.create(context);
+        DebugLogger.i(TAG, "launchSignIn: calling getCredentialAsync"
+                + " filterByAuthorized=" + filterByAuthorized);
+        credentialManager.getCredentialAsync(
+                fragment.requireActivity(),
+                request,
+                null,
+                fragment.requireActivity().getMainExecutor(),
+                new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
+                    @Override
+                    public void onResult(GetCredentialResponse response) {
+                        handleCredentialResponse(fragment, response, authLauncher);
+                    }
+
+                    @Override
+                    public void onError(GetCredentialException e) {
+                        if (filterByAuthorized && e instanceof NoCredentialException) {
+                            // No previously authorized account found — retry with account picker
+                            DebugLogger.i(TAG,
+                                    "launchSignIn: no authorized account, retrying with picker");
+                            doLaunchSignIn(fragment, authLauncher, /* filterByAuthorized= */ false);
+                        } else {
+                            DebugLogger.w(TAG, "launchSignIn: sign-in failed: " + e.getMessage());
+                            Toast.makeText(context,
+                                    context.getString(R.string.notify_sync_sign_in_failed),
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+        );
+    }
+
+    /**
+     * Processes a successful {@link GetCredentialResponse} from the Credential Manager.
+     * Extracts the signed-in email, persists it, and triggers Drive scope authorization.
+     */
+    private static void handleCredentialResponse(PreferenceFragmentCompat fragment,
+            GetCredentialResponse response,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
+        androidx.credentials.Credential credential = response.getCredential();
+        if (!(credential instanceof GoogleIdTokenCredential)) {
+            DebugLogger.w(TAG, "handleCredentialResponse: unexpected credential type: "
+                    + credential.getClass().getSimpleName());
+            Toast.makeText(fragment.requireContext(),
+                    fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        GoogleIdTokenCredential googleCredential = (GoogleIdTokenCredential) credential;
+        String email = googleCredential.getId();
+        DebugLogger.i(TAG, "handleCredentialResponse: sign-in successful, email=" + email);
+
+        PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
+                .edit()
+                .putString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, email)
+                .apply();
+
+        refreshSignInState(fragment);
+        launchDriveAuthorization(fragment, authLauncher);
     }
 
     // ── Drive authorization (two-step flow) ───────────────────────────────────
@@ -655,14 +713,16 @@ public class SyncSettingsHelper {
     public static void handleAuthorizationResult(PreferenceFragmentCompat fragment,
             ActivityResult result) {
         DebugLogger.i(TAG, "handleAuthorizationResult: resultCode=" + result.getResultCode());
-        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+        if (result.getResultCode() != android.app.Activity.RESULT_OK
+                || result.getData() == null) {
             DebugLogger.w(TAG, "Drive authorization cancelled (resultCode="
                     + result.getResultCode() + ")");
             onDriveAuthorizationFailed(fragment);
             return;
         }
         try {
-            AuthorizationResult authResult = Identity.getAuthorizationClient(fragment.requireActivity())
+            AuthorizationResult authResult = Identity.getAuthorizationClient(
+                    fragment.requireActivity())
                     .getAuthorizationResultFromIntent(result.getData());
             DebugLogger.i(TAG, "handleAuthorizationResult: Drive scopes granted"
                     + " hasToken=" + (authResult.getAccessToken() != null));
@@ -698,10 +758,9 @@ public class SyncSettingsHelper {
         }
         refreshSignInState(fragment);
         if (alwaysToast || !wasEnabled) {
-            GoogleSignInAccount account =
-                    GoogleSignIn.getLastSignedInAccount(fragment.requireContext());
-            String email = (account != null && account.getEmail() != null)
-                    ? account.getEmail() : "";
+            String email = PreferenceManager
+                    .getDefaultSharedPreferences(fragment.requireContext())
+                    .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, "");
             DebugLogger.i(TAG, "completeDriveAuthorization: Drive sync enabled, email=" + email);
             Toast.makeText(fragment.requireContext(),
                     fragment.requireContext().getString(R.string.notify_sync_signed_in, email),
@@ -728,37 +787,47 @@ public class SyncSettingsHelper {
                 Toast.LENGTH_SHORT).show();
     }
 
-    private static void launchSignIn(Context context, ActivityResultLauncher<Intent> launcher) {
-        DebugLogger.i(TAG, "launchSignIn: requesting email (Drive scopes authorized separately)");
-        GoogleSignInOptions options = new GoogleSignInOptions.Builder(
-                GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestEmail()
-                .build();
-        GoogleSignInClient client = GoogleSignIn.getClient(context, options);
-        DebugLogger.i(TAG, "launchSignIn: launching sign-in intent");
-        try {
-            launcher.launch(client.getSignInIntent());
-        } catch (IllegalStateException e) {
-            DebugLogger.e(TAG, "launchSignIn: failed to launch sign-in intent", e);
-            Toast.makeText(context,
-                    context.getString(R.string.notify_sync_sign_in_failed),
-                    Toast.LENGTH_SHORT).show();
-        }
-    }
+    // ── Sign-out ───────────────────────────────────────────────────────────────
 
     private static void signOut(Context context, Preference driveEnabledPref,
             Preference accountPref, Preference signInPref, Preference signOutPref) {
-        DebugLogger.i(TAG, "signOut: initiating Google sign-out");
-        GoogleSignInOptions options = new GoogleSignInOptions.Builder(
-                GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestEmail()
-                .build();
-        GoogleSignInClient client = GoogleSignIn.getClient(context, options);
-        client.signOut().addOnCompleteListener(task -> {
-            DebugLogger.i(TAG, "signOut: completed, success=" + task.isSuccessful());
-            // Disable Drive sync and clear household after sign-out
+        DebugLogger.i(TAG, "signOut: initiating sign-out via Credential Manager");
+        CredentialManager credentialManager = CredentialManager.create(context);
+        credentialManager.clearCredentialStateAsync(
+                new ClearCredentialStateRequest(),
+                null,
+                Executors.newSingleThreadExecutor(),
+                new CredentialManagerCallback<Void, ClearCredentialException>() {
+                    @Override
+                    public void onResult(Void result) {
+                        DebugLogger.i(TAG, "signOut: credential state cleared");
+                        performSignOut(context, driveEnabledPref, accountPref,
+                                signInPref, signOutPref);
+                    }
+
+                    @Override
+                    public void onError(ClearCredentialException e) {
+                        DebugLogger.w(TAG, "signOut: clearCredentialState error (clearing locally): "
+                                + e.getMessage());
+                        // Clear locally even if the credential manager reports an error
+                        performSignOut(context, driveEnabledPref, accountPref,
+                                signInPref, signOutPref);
+                    }
+                }
+        );
+    }
+
+    /**
+     * Removes the stored email, disables Drive sync, and updates the UI.
+     * Must be called on the main thread (or post to main handler).
+     */
+    private static void performSignOut(Context context, Preference driveEnabledPref,
+            Preference accountPref, Preference signInPref, Preference signOutPref) {
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        mainHandler.post(() -> {
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit()
+                    .remove(DriveTransportFactory.PREF_SIGNED_IN_EMAIL)
                     .putBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false)
                     .apply();
             HouseholdManager.clearHouseholdFolderId(context);
@@ -767,7 +836,6 @@ public class SyncSettingsHelper {
                 ((androidx.preference.CheckBoxPreference) driveEnabledPref).setChecked(false);
             }
 
-            // Update visibility
             if (signInPref  != null) signInPref.setVisible(true);
             if (accountPref != null) accountPref.setVisible(false);
             if (signOutPref != null) signOutPref.setVisible(false);
@@ -775,7 +843,7 @@ public class SyncSettingsHelper {
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_signed_out),
                     Toast.LENGTH_SHORT).show();
-            DebugLogger.i(TAG, "signOut: UI updated, signed out of Google.");
+            DebugLogger.i(TAG, "signOut: UI updated, signed out.");
         });
     }
 }
