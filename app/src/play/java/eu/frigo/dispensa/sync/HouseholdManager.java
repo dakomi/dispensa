@@ -18,6 +18,8 @@ import com.google.api.services.drive.model.Permission;
 import java.io.IOException;
 import java.util.Collections;
 
+import eu.frigo.dispensa.util.DebugLogger;
+
 /**
  * Manages the "Dispensa Household" shared Drive folder for multi-account sync.
  *
@@ -93,6 +95,7 @@ public class HouseholdManager {
      * Removes the stored household folder ID, reverting this device to solo-mode Drive sync.
      */
     public static void clearHouseholdFolderId(Context context) {
+        DebugLogger.i(TAG, "clearHouseholdFolderId: removing stored household folder ID");
         PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
                 .remove(PREF_HOUSEHOLD_FOLDER_ID)
@@ -136,6 +139,7 @@ public class HouseholdManager {
      * @throws IOException on any Drive API or network error
      */
     public static String createHousehold(Drive drive, Context context) throws IOException {
+        DebugLogger.i(TAG, "createHousehold: creating Drive folder '" + FOLDER_NAME + "'");
         File folderMeta = new File()
                 .setName(FOLDER_NAME)
                 .setMimeType(FOLDER_MIME_TYPE);
@@ -144,6 +148,7 @@ public class HouseholdManager {
                 .execute();
         String folderId = created.getId();
         setHouseholdFolderId(context, folderId);
+        DebugLogger.i(TAG, "createHousehold: folder created, id=" + folderId);
         Log.d(TAG, "Household folder created: " + folderId);
         return folderId;
     }
@@ -160,6 +165,8 @@ public class HouseholdManager {
      */
     public static void grantAccess(Drive drive, String folderId, String email)
             throws IOException {
+        DebugLogger.i(TAG, "grantAccess: granting writer access to " + email
+                + " on folderId=" + folderId);
         Permission permission = new Permission()
                 .setType("user")
                 .setRole("writer")
@@ -167,6 +174,7 @@ public class HouseholdManager {
         drive.permissions().create(folderId, permission)
                 .setSendNotificationEmail(false)
                 .execute();
+        DebugLogger.i(TAG, "grantAccess: permission granted to " + email);
         Log.d(TAG, "Writer access granted to " + email + " on folder " + folderId);
     }
 
@@ -185,21 +193,30 @@ public class HouseholdManager {
      */
     public static boolean verifyAndJoin(Drive drive, Context context, String folderId)
             throws IOException {
+        DebugLogger.i(TAG, "verifyAndJoin: checking access to folderId=" + folderId);
         try {
             File folder = drive.files().get(folderId)
                     .setFields("id,name")
                     .execute();
-            if (folder == null || folder.getId() == null) return false;
+            if (folder == null || folder.getId() == null) {
+                DebugLogger.w(TAG, "verifyAndJoin: folder response was null or had no id");
+                return false;
+            }
             setHouseholdFolderId(context, folderId);
+            DebugLogger.i(TAG, "verifyAndJoin: joined household folder '"
+                    + folder.getName() + "' id=" + folderId);
             Log.d(TAG, "Joined household folder: " + folderId
                     + " (" + folder.getName() + ")");
             return true;
         } catch (GoogleJsonResponseException e) {
             int status = e.getStatusCode();
             if (status == 403 || status == 404) {
+                DebugLogger.w(TAG, "verifyAndJoin: cannot access folder " + folderId
+                        + ": HTTP " + status);
                 Log.w(TAG, "Cannot access folder " + folderId + ": HTTP " + status);
                 return false;
             }
+            DebugLogger.e(TAG, "verifyAndJoin: unexpected Drive error HTTP " + status, e);
             throw e;
         }
     }

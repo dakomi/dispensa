@@ -7,6 +7,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 
 import androidx.preference.PreferenceManager;
 
+import eu.frigo.dispensa.util.DebugLogger;
+
 /**
  * Play-flavor implementation of the Drive transport factory.
  *
@@ -46,10 +48,17 @@ public class DriveTransportFactory {
         boolean enabled = PreferenceManager
                 .getDefaultSharedPreferences(context)
                 .getBoolean(PREF_SYNC_DRIVE_ENABLED, false);
-        if (!enabled) return null;
+        if (!enabled) {
+            DebugLogger.i("DriveTransportFactory", "create: Drive sync is disabled — returning null");
+            return null;
+        }
 
         GoogleSignInAccount signInAccount = GoogleSignIn.getLastSignedInAccount(context);
-        if (signInAccount == null || signInAccount.getAccount() == null) return null;
+        if (signInAccount == null || signInAccount.getAccount() == null) {
+            DebugLogger.w("DriveTransportFactory",
+                    "create: Drive sync enabled but no signed-in account — returning null");
+            return null;
+        }
 
         String householdFolderId = HouseholdManager.getHouseholdFolderId(context);
         if (householdFolderId != null) {
@@ -58,11 +67,18 @@ public class DriveTransportFactory {
                     .getDefaultSharedPreferences(context)
                     .getString(SyncManager.PREFS_KEY_DEVICE_ID, null);
             if (deviceId != null) {
+                DebugLogger.i("DriveTransportFactory",
+                        "create: returning household transport, folderId=" + householdFolderId
+                                + " deviceId=" + deviceId);
                 return new GoogleDriveSyncTransport(context, signInAccount.getAccount(),
                         householdFolderId, deviceId);
             }
+            DebugLogger.w("DriveTransportFactory",
+                    "create: householdFolderId set but deviceId not yet initialised — falling back to solo mode");
         }
 
+        DebugLogger.i("DriveTransportFactory",
+                "create: returning solo transport, account=" + signInAccount.getEmail());
         return new GoogleDriveSyncTransport(context, signInAccount.getAccount());
     }
 }

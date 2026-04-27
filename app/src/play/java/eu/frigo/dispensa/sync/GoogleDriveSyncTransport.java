@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import eu.frigo.dispensa.util.DebugLogger;
+
 /**
  * {@link SyncTransport} that syncs via a Google Drive {@code appDataFolder} file.
  *
@@ -122,14 +124,20 @@ public class GoogleDriveSyncTransport implements SyncTransport {
      */
     @Override
     public void push(byte[] data, SyncCallback callback) {
+        DebugLogger.i(TAG, "push: starting, dataBytes=" + (data == null ? 0 : data.length));
         try {
             byte[] remoteBlob = driveOps.downloadSyncFile();
+            DebugLogger.i(TAG, "push: downloaded remote blob, bytes="
+                    + (remoteBlob == null ? 0 : remoteBlob.length));
             uploadWithRetry(data);
+            DebugLogger.i(TAG, "push: upload complete, calling onSuccess");
             callback.onSuccess(remoteBlob);
         } catch (AuthException e) {
+            DebugLogger.e(TAG, "push: Drive auth expired", e);
             Log.w(TAG, "Drive auth expired", e);
             callback.onError(e);
         } catch (IOException e) {
+            DebugLogger.e(TAG, "push: Drive push error", e);
             Log.w(TAG, "Drive push error", e);
             callback.onError(e);
         }
@@ -141,13 +149,18 @@ public class GoogleDriveSyncTransport implements SyncTransport {
      */
     @Override
     public void pull(SyncCallback callback) {
+        DebugLogger.i(TAG, "pull: starting");
         try {
             byte[] remoteBlob = driveOps.downloadSyncFile();
+            DebugLogger.i(TAG, "pull: success, bytes="
+                    + (remoteBlob == null ? 0 : remoteBlob.length));
             callback.onSuccess(remoteBlob);
         } catch (AuthException e) {
+            DebugLogger.e(TAG, "pull: Drive auth expired", e);
             Log.w(TAG, "Drive auth expired", e);
             callback.onError(e);
         } catch (IOException e) {
+            DebugLogger.e(TAG, "pull: Drive pull error", e);
             Log.w(TAG, "Drive pull error", e);
             callback.onError(e);
         }

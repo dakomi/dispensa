@@ -35,6 +35,7 @@ import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.sync.HouseholdManager;
 import eu.frigo.dispensa.sync.SyncCallback;
 import eu.frigo.dispensa.sync.SyncTransport;
+import eu.frigo.dispensa.util.DebugLogger;
 
 /**
  * Play-flavor helper that injects Google Drive sync preferences into {@link SettingsFragment}.
@@ -197,15 +198,19 @@ public class SyncSettingsHelper {
      */
     public static void handleSignInResult(PreferenceFragmentCompat fragment,
             ActivityResult result) {
+        DebugLogger.i(TAG, "handleSignInResult: resultCode=" + result.getResultCode()
+                + " hasData=" + (result.getData() != null));
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-            Log.d(TAG, "Sign-in cancelled or failed (resultCode=" + result.getResultCode() + ")");
+            DebugLogger.w(TAG, "Sign-in cancelled or failed (resultCode=" + result.getResultCode() + ")");
             return;
         }
         Task<GoogleSignInAccount> task =
                 GoogleSignIn.getSignedInAccountFromIntent(result.getData());
         try {
             GoogleSignInAccount account = task.getResult(ApiException.class);
-            Log.d(TAG, "Sign-in successful: " + account.getEmail());
+            DebugLogger.i(TAG, "Sign-in successful: email=" + account.getEmail()
+                    + " id=" + account.getId()
+                    + " grantedScopes=" + account.getGrantedScopes());
 
             // Auto-enable Drive sync now that the user is signed in
             PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
@@ -220,7 +225,8 @@ public class SyncSettingsHelper {
                     Toast.LENGTH_SHORT).show();
 
         } catch (ApiException e) {
-            Log.w(TAG, "Google Sign-In failed, statusCode=" + e.getStatusCode(), e);
+            DebugLogger.e(TAG, "Google Sign-In failed: statusCode=" + e.getStatusCode()
+                    + " statusMessage=" + e.getStatus().getStatusMessage(), e);
             Toast.makeText(fragment.requireContext(),
                     fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
                     Toast.LENGTH_SHORT).show();
@@ -238,10 +244,12 @@ public class SyncSettingsHelper {
      */
     public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
             boolean enabled, ActivityResultLauncher<Intent> launcher) {
+        DebugLogger.i(TAG, "onDriveEnabledChanged: enabled=" + enabled);
         if (enabled) {
             GoogleSignInAccount account =
                     GoogleSignIn.getLastSignedInAccount(fragment.requireContext());
             if (account == null) {
+                DebugLogger.w(TAG, "Drive enabled but no signed-in account — launching sign-in");
                 // Revert the toggle and prompt the user to sign in first
                 PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
                         .edit()
@@ -327,8 +335,10 @@ public class SyncSettingsHelper {
      * (even a {@code null} result meaning no file yet) confirms that Drive is reachable.
      */
     private static void testDriveConnection(Context context) {
+        DebugLogger.i(TAG, "testDriveConnection: starting");
         SyncTransport transport = DriveTransportFactory.create(context, null);
         if (transport == null) {
+            DebugLogger.w(TAG, "testDriveConnection: no transport — user not signed in");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
                     Toast.LENGTH_SHORT).show();
@@ -340,6 +350,8 @@ public class SyncSettingsHelper {
                 transport.pull(new SyncCallback() {
                     @Override
                     public void onSuccess(byte[] data) {
+                        DebugLogger.i(TAG, "testDriveConnection: success, dataBytes="
+                                + (data == null ? 0 : data.length));
                         mainHandler.post(() -> Toast.makeText(context,
                                 context.getString(R.string.notify_sync_drive_test_ok),
                                 Toast.LENGTH_SHORT).show());
@@ -347,6 +359,7 @@ public class SyncSettingsHelper {
 
                     @Override
                     public void onError(Exception e) {
+                        DebugLogger.e(TAG, "testDriveConnection: error", e);
                         String msg = context.getString(
                                 R.string.notify_sync_drive_test_fail, e.getMessage());
                         mainHandler.post(() -> Toast.makeText(context, msg,
@@ -448,21 +461,25 @@ public class SyncSettingsHelper {
         Context context = fragment.requireContext();
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
         if (account == null || account.getAccount() == null) {
+            DebugLogger.w(TAG, "createHousehold: no signed-in account");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
                     Toast.LENGTH_SHORT).show();
             return;
         }
+        DebugLogger.i(TAG, "createHousehold: starting, emailCount=" + emails.length);
         Drive drive = HouseholdManager.buildDrive(context, account.getAccount());
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             try {
                 String folderId = HouseholdManager.createHousehold(drive, context);
+                DebugLogger.i(TAG, "createHousehold: folder created, id=" + folderId);
                 for (String email : emails) {
                     String trimmed = email.trim();
                     if (!trimmed.isEmpty()) {
                         HouseholdManager.grantAccess(drive, folderId, trimmed);
+                        DebugLogger.i(TAG, "createHousehold: granted access to " + trimmed);
                     }
                 }
                 String deepLink = HouseholdManager.generateJoinDeepLink(folderId);
@@ -471,7 +488,7 @@ public class SyncSettingsHelper {
                     showDeepLinkDialog(context, deepLink);
                 });
             } catch (Exception e) {
-                Log.w(TAG, "Failed to create household", e);
+                DebugLogger.e(TAG, "createHousehold: failed", e);
                 String msg = context.getString(R.string.err_household_create, e.getMessage());
                 mainHandler.post(() ->
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
@@ -484,17 +501,20 @@ public class SyncSettingsHelper {
         Context context = fragment.requireContext();
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(context);
         if (account == null || account.getAccount() == null) {
+            DebugLogger.w(TAG, "joinHousehold: no signed-in account");
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_drive_test_not_signed_in),
                     Toast.LENGTH_SHORT).show();
             return;
         }
+        DebugLogger.i(TAG, "joinHousehold: attempting folderId=" + folderId);
         Drive drive = HouseholdManager.buildDrive(context, account.getAccount());
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.execute(() -> {
             try {
                 boolean joined = HouseholdManager.verifyAndJoin(drive, context, folderId);
+                DebugLogger.i(TAG, "joinHousehold: result=" + joined);
                 mainHandler.post(() -> {
                     if (joined) {
                         refreshSignInState(fragment);
@@ -508,7 +528,7 @@ public class SyncSettingsHelper {
                     }
                 });
             } catch (Exception e) {
-                Log.w(TAG, "Failed to join household", e);
+                DebugLogger.e(TAG, "joinHousehold: failed", e);
                 String msg = context.getString(R.string.err_household_join, e.getMessage());
                 mainHandler.post(() ->
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
@@ -548,6 +568,7 @@ public class SyncSettingsHelper {
     }
 
     private static void launchSignIn(Context context, ActivityResultLauncher<Intent> launcher) {
+        DebugLogger.i(TAG, "launchSignIn: requesting DRIVE_APPDATA + DRIVE_FILE scopes");
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(
                 GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
@@ -555,17 +576,20 @@ public class SyncSettingsHelper {
                 .requestScopes(new Scope(DriveScopes.DRIVE_FILE))
                 .build();
         GoogleSignInClient client = GoogleSignIn.getClient(context, options);
+        DebugLogger.i(TAG, "launchSignIn: launching sign-in intent");
         launcher.launch(client.getSignInIntent());
     }
 
     private static void signOut(Context context, Preference driveEnabledPref,
             Preference accountPref, Preference signInPref, Preference signOutPref) {
+        DebugLogger.i(TAG, "signOut: initiating Google sign-out");
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(
                 GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
                 .build();
         GoogleSignInClient client = GoogleSignIn.getClient(context, options);
         client.signOut().addOnCompleteListener(task -> {
+            DebugLogger.i(TAG, "signOut: completed, success=" + task.isSuccessful());
             // Disable Drive sync and clear household after sign-out
             PreferenceManager.getDefaultSharedPreferences(context)
                     .edit()
@@ -585,7 +609,7 @@ public class SyncSettingsHelper {
             Toast.makeText(context,
                     context.getString(R.string.notify_sync_signed_out),
                     Toast.LENGTH_SHORT).show();
-            Log.d(TAG, "Signed out of Google.");
+            DebugLogger.i(TAG, "signOut: UI updated, signed out of Google.");
         });
     }
 }

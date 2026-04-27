@@ -3,4 +3,8 @@
     <external-files-path
         name="product_images"
         path="product_images/" />
+    <!-- Debug log file (internal files dir) -->
+    <files-path
+        name="debug_logs"
+        path="." />
 </paths>

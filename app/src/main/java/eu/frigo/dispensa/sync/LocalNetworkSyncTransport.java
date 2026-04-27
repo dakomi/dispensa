@@ -17,6 +17,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import eu.frigo.dispensa.util.DebugLogger;
+
 /**
  * {@link SyncTransport} implementation that uses Android {@link NsdManager} (mDNS / DNS-SD)
  * for peer discovery and plain TCP sockets for bidirectional change-blob exchange.
@@ -134,6 +136,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
     public void start() throws IOException {
         if (running) return;
 
+        DebugLogger.i(TAG, "start: acquiring multicast lock and opening TCP server socket");
         if (multicastLock != null && !multicastLock.isHeld()) {
             multicastLock.acquire();
         }
@@ -141,6 +144,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         serverSocket = new ServerSocket(0);
         localPort = serverSocket.getLocalPort();
         running = true;
+        DebugLogger.i(TAG, "start: TCP server listening on port " + localPort);
 
         executor.execute(this::acceptLoop);
 
@@ -153,6 +157,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
      * Safe to call multiple times or if {@link #start()} was never called.
      */
     public void stop() {
+        DebugLogger.i(TAG, "stop: stopping transport");
         running = false;
 
         if (multicastLock != null && multicastLock.isHeld()) {
@@ -198,16 +203,22 @@ public class LocalNetworkSyncTransport implements SyncTransport {
     @Override
     public void push(byte[] data, SyncCallback callback) {
         if (discoveredPeers.isEmpty()) {
+            DebugLogger.i(TAG, "push: no peers discovered, calling onSuccess(null)");
             callback.onSuccess(null);
             return;
         }
 
         NsdServiceInfo peer = discoveredPeers.get(0);
+        DebugLogger.i(TAG, "push: connecting to peer " + peer.getHost() + ":" + peer.getPort()
+                + ", dataBytes=" + (data == null ? 0 : data.length));
         executor.execute(() -> {
             try {
                 byte[] peerBlob = exchangeWithPeer(peer.getHost(), peer.getPort(), data);
+                DebugLogger.i(TAG, "push: exchange complete, peerBlobBytes="
+                        + (peerBlob == null ? 0 : peerBlob.length));
                 callback.onSuccess(peerBlob);
             } catch (IOException e) {
+                DebugLogger.e(TAG, "push: failed to exchange with peer " + peer.getHost(), e);
                 Log.w(TAG, "Failed to exchange with peer " + peer.getHost(), e);
                 callback.onError(e);
             }
@@ -241,12 +252,15 @@ public class LocalNetworkSyncTransport implements SyncTransport {
 
     private void handleIncomingConnection(Socket client) {
         try (Socket s = client) {
+            DebugLogger.i(TAG, "handleIncomingConnection: accepted from "
+                    + client.getInetAddress());
             DataInputStream in = new DataInputStream(s.getInputStream());
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
 
             // Read peer's blob
             int peerBlobLen = in.readInt();
             if (peerBlobLen < 0 || peerBlobLen > MAX_BLOB_SIZE_BYTES) {
+                DebugLogger.w(TAG, "handleIncomingConnection: invalid blob size " + peerBlobLen);
                 throw new IOException("Invalid blob size from peer: " + peerBlobLen);
             }
             byte[] peerBlob = new byte[peerBlobLen];
@@ -258,29 +272,37 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             if (permissionManager != null) {
                 String senderDeviceId = SyncManager.extractSenderDeviceId(peerBlob);
                 if (senderDeviceId == null) {
+                    DebugLogger.w(TAG, "handleIncomingConnection: rejected — no senderDeviceId");
                     Log.w(TAG, "Rejected sync from unidentifiable device (no senderDeviceId)");
                     writeEmptyBlob(out);
                     return;
                 }
                 if (!permissionManager.isTrusted(senderDeviceId)) {
                     permissionManager.markPending(senderDeviceId);
+                    DebugLogger.w(TAG, "handleIncomingConnection: rejected untrusted device "
+                            + senderDeviceId + " — added to pending");
                     Log.d(TAG, "Rejected sync from untrusted device " + senderDeviceId
                             + " — added to pending list");
                     writeEmptyBlob(out);
                     return;
                 }
+                DebugLogger.i(TAG, "handleIncomingConnection: trusted device " + senderDeviceId);
             }
 
             // Apply peer's changes to local database
+            DebugLogger.i(TAG, "handleIncomingConnection: importing " + peerBlobLen + " bytes");
             syncManager.importChanges(peerBlob);
 
             // Respond with our own changes
             byte[] ourBlob = syncManager.exportChanges(syncManager.getLastSyncVersion());
+            DebugLogger.i(TAG, "handleIncomingConnection: responding with " + ourBlob.length
+                    + " bytes");
             out.writeInt(ourBlob.length);
             out.write(ourBlob);
             out.flush();
 
         } catch (IOException e) {
+            DebugLogger.e(TAG, "handleIncomingConnection: error", e);
             Log.w(TAG, "Error handling incoming connection", e);
         }
     }
@@ -333,21 +355,25 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         registrationListener = new NsdManager.RegistrationListener() {
             @Override
             public void onServiceRegistered(NsdServiceInfo info) {
+                DebugLogger.i(TAG, "NSD service registered: " + info.getServiceName());
                 Log.d(TAG, "NSD service registered: " + info.getServiceName());
             }
 
             @Override
             public void onRegistrationFailed(NsdServiceInfo info, int errorCode) {
+                DebugLogger.w(TAG, "NSD registration failed, error=" + errorCode);
                 Log.w(TAG, "NSD registration failed, error=" + errorCode);
             }
 
             @Override
             public void onServiceUnregistered(NsdServiceInfo info) {
+                DebugLogger.i(TAG, "NSD service unregistered");
                 Log.d(TAG, "NSD service unregistered");
             }
 
             @Override
             public void onUnregistrationFailed(NsdServiceInfo info, int errorCode) {
+                DebugLogger.w(TAG, "NSD unregistration failed, error=" + errorCode);
                 Log.w(TAG, "NSD unregistration failed, error=" + errorCode);
             }
         };
@@ -365,26 +391,31 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+                DebugLogger.w(TAG, "NSD discovery start failed, error=" + errorCode);
                 Log.w(TAG, "Discovery start failed, error=" + errorCode);
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+                DebugLogger.w(TAG, "NSD discovery stop failed, error=" + errorCode);
                 Log.w(TAG, "Discovery stop failed, error=" + errorCode);
             }
 
             @Override
             public void onDiscoveryStarted(String serviceType) {
+                DebugLogger.i(TAG, "NSD discovery started for " + serviceType);
                 Log.d(TAG, "NSD discovery started for " + serviceType);
             }
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
+                DebugLogger.i(TAG, "NSD discovery stopped for " + serviceType);
                 Log.d(TAG, "NSD discovery stopped for " + serviceType);
             }
 
             @Override
             public void onServiceFound(NsdServiceInfo serviceInfo) {
+                DebugLogger.i(TAG, "NSD service found: " + serviceInfo.getServiceName());
                 Log.d(TAG, "NSD service found: " + serviceInfo.getServiceName());
                 resolveService(serviceInfo);
             }
@@ -395,6 +426,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
                 if (lostName != null) {
                     discoveredPeers.removeIf(p -> lostName.equals(p.getServiceName()));
                 }
+                DebugLogger.i(TAG, "NSD service lost: " + lostName);
                 Log.d(TAG, "NSD service lost: " + lostName);
             }
         };
@@ -406,6 +438,8 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         nsdManager.resolveService(serviceInfo, new NsdManager.ResolveListener() {
             @Override
             public void onResolveFailed(NsdServiceInfo info, int errorCode) {
+                DebugLogger.w(TAG, "NSD resolve failed for " + info.getServiceName()
+                        + ", error=" + errorCode);
                 Log.w(TAG, "NSD resolve failed for " + info.getServiceName()
                         + ", error=" + errorCode);
             }
@@ -414,10 +448,12 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             public void onServiceResolved(NsdServiceInfo info) {
                 if (info.getPort() == localPort) {
                     // Resolved to our own service — skip
+                    DebugLogger.i(TAG, "Skipping self-resolved NSD service (port=" + localPort + ")");
                     Log.d(TAG, "Skipping self-resolved NSD service (port=" + localPort + ")");
                     return;
                 }
                 discoveredPeers.add(info);
+                DebugLogger.i(TAG, "Peer resolved: " + info.getHost() + ":" + info.getPort());
                 Log.d(TAG, "Peer resolved: " + info.getHost() + ":" + info.getPort());
             }
         });
