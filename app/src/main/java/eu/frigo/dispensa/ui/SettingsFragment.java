@@ -272,20 +272,28 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
      */
     private void runLocalPeerScan() {
         Context context = requireContext();
-        Executors.newSingleThreadExecutor().execute(() -> {
+        java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
             SyncManager syncManager = new SyncManager(AppDatabase.getDatabase(context), context);
             LocalNetworkSyncTransport transport =
                     new LocalNetworkSyncTransport(context, syncManager);
             List<NsdServiceInfo> peers = new ArrayList<>();
+            boolean interrupted = false;
             try {
                 transport.start();
                 Thread.sleep(PEER_SCAN_DURATION_MS);
                 peers = transport.getDiscoveredPeers(); // snapshot before stop clears the list
-            } catch (IOException | InterruptedException e) {
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Peer scan interrupted", e);
+                interrupted = true;
+                peers = transport.getDiscoveredPeers(); // capture any partial results
+            } catch (IOException e) {
                 Log.w(TAG, "Peer scan error", e);
-                Thread.currentThread().interrupt();
             } finally {
                 transport.stop();
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
             final List<NsdServiceInfo> finalPeers = peers;
             new Handler(Looper.getMainLooper()).post(() -> {
@@ -293,6 +301,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 showPeerScanDialog(finalPeers);
             });
         });
+        executor.shutdown();
     }
 
     private void showPeerScanDialog(List<NsdServiceInfo> peers) {

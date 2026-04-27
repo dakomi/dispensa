@@ -268,7 +268,8 @@ public class SyncSettingsHelper {
             return;
         }
         Handler mainHandler = new Handler(Looper.getMainLooper());
-        Executors.newSingleThreadExecutor().execute(() ->
+        java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() ->
                 transport.pull(new SyncCallback() {
                     @Override
                     public void onSuccess(byte[] data) {
@@ -285,6 +286,7 @@ public class SyncSettingsHelper {
                                 Toast.LENGTH_LONG).show());
                     }
                 }));
+        executor.shutdown();
     }
 
     private static void launchSignIn(Context context, ActivityResultLauncher<Intent> launcher) {
