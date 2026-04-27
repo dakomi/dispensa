@@ -326,3 +326,30 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Both flavors compile; all unit tests pass
 
 **Tests:** All unit tests pass (fdroid + play); both flavors BUILD SUCCESSFUL.
+
+---
+
+### Session 14 — Google Sign-In Troubleshooting ✅
+
+**Goal:** Analyse debug logs from the user, identify why Google Sign-In was silently failing, and fix the auth flow.
+
+- [x] Analyse two exported debug logs:
+  - **Sign-in button log:** `launchSignIn` succeeded, but the process immediately restarted (`=== Dispensa debug log opened ===` appeared 154 ms after `launcher.launch()`) — indicating an unhandled exception caused a crash before the result callback was reached.
+  - **Checkbox log:** `handleSignInResult` was called with `resultCode=0` (`RESULT_CANCELED`) despite the user selecting an account — sign-in returned silently with no feedback.
+- [x] Research root cause via Google developer documentation: confirmed that `play-services-auth` 21.x **requires Drive scopes to be requested via a separate `Identity.getAuthorizationClient().authorize()` call** after sign-in; bundling `DRIVE_APPDATA`/`DRIVE_FILE` inside `GoogleSignInOptions` now silently returns `RESULT_CANCELED`.
+- [x] Fix `SyncSettingsHelper` (play) — short-term defensive fixes:
+  - `handleSignInResult`: extract and log `ApiException` status code when `resultCode != RESULT_OK` but `getData() != null`; show user-facing Toast on failure (was silent).
+  - `launchSignIn`: wrap `launcher.launch()` in `try/catch(IllegalStateException)` to log and show a Toast instead of crashing.
+- [x] Migrate `SyncSettingsHelper` (play) to the two-step auth flow:
+  - `launchSignIn`: stripped `DRIVE_APPDATA`/`DRIVE_FILE` from `GoogleSignInOptions`; now requests email only.
+  - Added `launchDriveAuthorization()`: calls `Identity.getAuthorizationClient().authorize()` with `DRIVE_APPDATA` + `DRIVE_FILE`; if scopes already granted, enables sync immediately; if consent is needed, launches the consent screen via `googleDriveAuthLauncher`.
+  - `handleSignInResult` success path: refreshes UI then calls `launchDriveAuthorization` (no longer enables Drive sync directly).
+  - Added `handleAuthorizationResult()`: processes consent-screen result; stores `AuthorizationResult`; calls `completeDriveAuthorization()` on success or `onDriveAuthorizationFailed()` on failure/cancel.
+  - Added `completeDriveAuthorization()`: enables `sync_drive_enabled` pref and shows confirmation Toast.
+  - Added `onDriveAuthorizationFailed()`: reverts the Drive sync toggle and shows error Toast.
+  - `onDriveEnabledChanged`: when account is already present, now calls `launchDriveAuthorization` (handles re-auth when toggle is re-enabled).
+- [x] Update `SyncSettingsHelper` (fdroid): updated no-op stub signatures to match new method signatures.
+- [x] Update `SettingsFragment`: added `googleDriveAuthLauncher` field (`ActivityResultLauncher<IntentSenderRequest>` via `StartIntentSenderForResult`); registered in `onCreate()`; updated `handleSignInResult` and `onDriveEnabledChanged` call sites.
+- [x] Both flavors compile; all unit tests pass.
+
+**Tests:** Both flavors BUILD SUCCESSFUL; all unit tests pass.

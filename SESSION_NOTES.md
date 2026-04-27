@@ -1022,3 +1022,68 @@ This plan would be implemented as Session 11.
   - `DebugLogger.init(Context)` must be called once from `Application.onCreate()` before any other component starts — it is idempotent but not thread-safe at init time.
   - All DebugLogger calls also invoke the corresponding `android.util.Log` method — both channels are always active, never use DebugLogger as a replacement for Log.
   - The log file path is `context.getFilesDir()/dispensa_debug.log`. The `FileProvider` authority is `eu.frigo.dispensa.fileprovider`.
+
+---
+
+## Session 14 — Google Sign-In Troubleshooting
+
+**Date:** 2026-04-27  
+**Goal:** Analyse exported debug logs, identify the root cause of the silent Google Sign-In failure, and fix the auth flow.
+
+### What was done
+
+- **Analysed two debug log exports provided by the user:**
+  - **Sign-in button log:** `launchSignIn` was called and `launcher.launch()` was reached, but the process immediately restarted (`=== Dispensa debug log opened ===` appeared 154 ms after `launcher.launch()`). This indicated an unhandled exception crashed the process before the result callback was ever delivered.
+  - **Checkbox log:** `handleSignInResult` was called with `resultCode=0` (`RESULT_CANCELED`) even after the user selected a Google account — sign-in returned silently with no user-facing feedback.
+
+- **Identified root cause via Google developer documentation:**  
+  `play-services-auth` 21.x requires Drive scopes (`DRIVE_APPDATA`, `DRIVE_FILE`) to be requested in a **separate, explicit authorization step** via `Identity.getAuthorizationClient().authorize()` — they can no longer be bundled into `GoogleSignInOptions`. The old combined approach returns `RESULT_CANCELED` silently.
+
+- **Short-term defensive fixes** (committed first):
+  - `handleSignInResult`: when `resultCode != RESULT_OK` but `getData() != null`, now extracts the `ApiException` status code and logs it; shows a Toast on failure (was completely silent before).
+  - `launchSignIn`: wrapped `launcher.launch()` in `try/catch(IllegalStateException)` — an unexpected exception now logs to `DebugLogger` and shows a Toast rather than silently crashing.
+
+- **Two-step auth flow migration** (main fix):
+  - `launchSignIn`: stripped `DRIVE_APPDATA`/`DRIVE_FILE` from `GoogleSignInOptions`; now requests email only.
+  - Added `launchDriveAuthorization(fragment, authLauncher)`: calls `Identity.getAuthorizationClient().authorize()` with the two Drive scopes; if already granted → `completeDriveAuthorization` immediately; if consent needed → launches the consent screen via `googleDriveAuthLauncher`.
+  - `handleSignInResult` success path: now calls `launchDriveAuthorization` after refreshing the UI instead of enabling Drive sync directly.
+  - Added `handleAuthorizationResult(fragment, result)`: processes the consent-screen result; stores and logs the `AuthorizationResult`; calls `completeDriveAuthorization` on success or `onDriveAuthorizationFailed` on failure/cancellation.
+  - Added `completeDriveAuthorization(fragment, alwaysToast)`: enables `sync_drive_enabled` pref and shows confirmation Toast with signed-in email.
+  - Added `onDriveAuthorizationFailed(fragment)`: reverts the Drive sync toggle to false and shows error Toast.
+  - `onDriveEnabledChanged`: when a Google account is already present but Drive scopes haven't been granted, now calls `launchDriveAuthorization` (covers the re-enable-toggle case).
+
+- **`SyncSettingsHelper` (fdroid) stubs** updated to match the new method signatures (`handleSignInResult` gains `authLauncher` param; `onDriveEnabledChanged` gains `authLauncher` param; new `handleAuthorizationResult` stub added).
+
+- **`SettingsFragment`**: added `googleDriveAuthLauncher` field (`ActivityResultLauncher<IntentSenderRequest>`, registered via `StartIntentSenderForResult` in `onCreate()`); updated `handleSignInResult` and `onDriveEnabledChanged` call sites to pass it through.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — two-step auth flow; new methods; defensive fixes
+- `app/src/fdroid/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — updated stub signatures; new `handleAuthorizationResult` stub
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — added `googleDriveAuthLauncher`; updated call sites
+- `PLAN.md` — Session 14 tasks added and marked complete
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all tests pass.
+- `compileFdroidDebugJavaWithJavac` — BUILD SUCCESSFUL.
+- `compilePlayDebugJavaWithJavac` — BUILD SUCCESSFUL.
+
+### Handoff to Session 15
+
+- **The two-step auth flow is in place.** The user should install the updated play build and retry Google Sign-In.
+- **Expected new flow:** Sign-In button → Google account picker → account selected → Drive scope consent screen appears → user approves → Drive sync is enabled and confirmed with a Toast.
+- **If sign-in still fails:** The DebugLogger will now capture the `ApiException` status code. Key codes to watch for:
+  - `10` — `DEVELOPER_ERROR`: SHA-1 fingerprint or package name mismatch in Google Cloud Console. The debug keystore SHA-1 must be registered as an Android OAuth client in the project.
+  - `12500` — `SIGN_IN_FAILED`: general OAuth misconfiguration (check OAuth consent screen and client ID).
+  - `12501` — `SIGN_IN_CANCELLED`: user dismissed the picker (not a code bug).
+- **If the authorization step fails:** `handleAuthorizationResult` logs `statusCode` — check `launchDriveAuthorization: authorize() failed` in the log.
+- **Outstanding polish items** (from prior sessions, not addressed this session):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
+- **Conventions established this session:**
+  - Sign-in and Drive scope authorization are two distinct flows. `launchSignIn` only gets the Google account (email); `launchDriveAuthorization` requests Drive scopes via `Identity.getAuthorizationClient().authorize()`.
+  - `SettingsFragment` must register both `googleSignInLauncher` (`StartActivityForResult`) and `googleDriveAuthLauncher` (`StartIntentSenderForResult`) in `onCreate()` before the fragment starts.
+  - Drive sync is enabled (`sync_drive_enabled = true`) only after `completeDriveAuthorization()` is called — never directly in the sign-in result handler.
