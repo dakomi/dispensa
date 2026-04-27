@@ -146,4 +146,23 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        app:key="pref_cat_debug"
+        app:title="@string/pref_cat_debug_title"
+        app:iconSpaceReserved="false">
+
+        <Preference
+            app:key="pref_debug_export_log"
+            app:title="@string/pref_debug_export_log_title"
+            app:summary="@string/pref_debug_export_log_summary"
+            app:iconSpaceReserved="false"/>
+
+        <Preference
+            app:key="pref_debug_clear_log"
+            app:title="@string/pref_debug_clear_log_title"
+            app:summary="@string/pref_debug_clear_log_summary"
+            app:iconSpaceReserved="false"/>
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

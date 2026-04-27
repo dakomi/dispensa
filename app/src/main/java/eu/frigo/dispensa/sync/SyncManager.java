@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 import eu.frigo.dispensa.data.AppDatabase;
+import eu.frigo.dispensa.util.DebugLogger;
 
 /**
  * Transport-agnostic sync manager.
@@ -109,6 +110,8 @@ public class SyncManager {
     private static final String DELETE_STORAGE_LOCATION_SQL =
             "DELETE FROM storage_locations WHERE id = ?";
 
+    private static final String TAG = "SyncManager";
+
     // ── Fields ────────────────────────────────────────────────────────────────
 
     private final SupportSQLiteDatabase db;
@@ -160,7 +163,10 @@ public class SyncManager {
         }
 
         SyncBlob blob = new SyncBlob(localDeviceId, changes);
-        return gson.toJson(blob).getBytes(StandardCharsets.UTF_8);
+        byte[] bytes = gson.toJson(blob).getBytes(StandardCharsets.UTF_8);
+        DebugLogger.i(TAG, "exportChanges: lastSyncVersion=" + lastSyncVersion
+                + " changeCount=" + changes.size() + " bytes=" + bytes.length);
+        return bytes;
     }
 
     /**
@@ -174,8 +180,13 @@ public class SyncManager {
         if (blobBytes == null) return;
         String json = new String(blobBytes, StandardCharsets.UTF_8);
         SyncBlob blob = gson.fromJson(json, SyncBlob.class);
-        if (blob == null || blob.changes == null || blob.changes.isEmpty()) return;
+        if (blob == null || blob.changes == null || blob.changes.isEmpty()) {
+            DebugLogger.i(TAG, "importChanges: blob is empty or null — nothing to import");
+            return;
+        }
 
+        DebugLogger.i(TAG, "importChanges: processing " + blob.changes.size()
+                + " changes from senderDeviceId=" + blob.senderDeviceId);
         String localDeviceId = getLocalDeviceId();
 
         db.beginTransaction();
@@ -205,6 +216,7 @@ public class SyncManager {
 
             db.execSQL(UNLOCK_SQL);
             db.setTransactionSuccessful();
+            DebugLogger.i(TAG, "importChanges: transaction committed successfully");
         } finally {
             db.endTransaction();
         }

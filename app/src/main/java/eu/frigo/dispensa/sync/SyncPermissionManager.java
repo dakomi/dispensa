@@ -7,6 +7,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import eu.frigo.dispensa.util.DebugLogger;
+
 /**
  * Manages the allowlist of trusted device UUIDs for local-network sync.
  *

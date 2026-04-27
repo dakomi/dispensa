@@ -294,4 +294,16 @@
     <string name="consume_success">Product consumed successfully</string>
     <string name="consume_scan_description">Scan product to consume</string>
     <string name="language_german">German</string>
+
+    <!-- Debug log -->
+    <string name="pref_cat_debug_title">Debug</string>
+    <string name="pref_debug_export_log_title">Export debug log</string>
+    <string name="pref_debug_export_log_summary">Share the app debug log file to help diagnose issues</string>
+    <string name="pref_debug_clear_log_title">Clear debug log</string>
+    <string name="pref_debug_clear_log_summary">Delete the current log file and start fresh</string>
+    <string name="notify_debug_log_empty">Debug log is empty</string>
+    <string name="notify_debug_log_cleared">Debug log cleared</string>
+    <string name="notify_debug_log_share_subject">Dispensa debug log</string>
+    <string name="notify_debug_log_share_chooser">Share debug log via…</string>
+    <string name="notify_debug_log_share_failed">Failed to share debug log</string>
 </resources>

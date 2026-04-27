@@ -3,6 +3,7 @@ package eu.frigo.dispensa.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,6 +15,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.content.FileProvider;
 import androidx.core.os.LocaleListCompat;
 import androidx.preference.EditTextPreference;
 import androidx.preference.ListPreference;
@@ -39,6 +41,7 @@ import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
 import eu.frigo.dispensa.sync.SyncManager;
 import eu.frigo.dispensa.ui.ManageSyncDevicesFragment;
+import eu.frigo.dispensa.util.DebugLogger;
 import eu.frigo.dispensa.util.LocaleHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
 import eu.frigo.dispensa.work.SyncWorker;
@@ -61,6 +64,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     public static final String KEY_SYNC_TRIGGER_MANUAL = "sync_trigger_manual";
     public static final String KEY_SYNC_LOCAL_PEERS_STATUS = "sync_local_peers_status";
     public static final String KEY_SYNC_LOCAL_SCAN_PEERS = "sync_local_scan_peers";
+    private static final String KEY_DEBUG_EXPORT_LOG = "pref_debug_export_log";
+    private static final String KEY_DEBUG_CLEAR_LOG = "pref_debug_clear_log";
 
     /**
      * Fragment argument key that carries a household folder ID from a deep-link Intent.
@@ -199,6 +204,25 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             if (householdFolderId != null) {
                 SyncSettingsHelper.handleHouseholdDeepLink(this, householdFolderId);
             }
+        }
+
+        // Debug log export
+        Preference exportLogPref = findPreference(KEY_DEBUG_EXPORT_LOG);
+        if (exportLogPref != null) {
+            exportLogPref.setOnPreferenceClickListener(preference -> {
+                exportDebugLog();
+                return true;
+            });
+        }
+        Preference clearLogPref = findPreference(KEY_DEBUG_CLEAR_LOG);
+        if (clearLogPref != null) {
+            clearLogPref.setOnPreferenceClickListener(preference -> {
+                DebugLogger.clear();
+                android.widget.Toast.makeText(requireContext(),
+                        getString(R.string.notify_debug_log_cleared),
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return true;
+            });
         }
     }
 
@@ -451,5 +475,40 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             return true;
         }
         return false;
+    }
+
+    /**
+     * Shares the debug log file via Android's share sheet.
+     *
+     * <p>Uses {@link FileProvider} (authority {@code eu.frigo.dispensa.fileprovider}) so that
+     * receiving apps can read a file from the app's private files directory.
+     */
+    private void exportDebugLog() {
+        java.io.File logFile = DebugLogger.getLogFile();
+        if (logFile == null || !logFile.exists() || logFile.length() == 0) {
+            android.widget.Toast.makeText(requireContext(),
+                    getString(R.string.notify_debug_log_empty),
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            Uri uri = FileProvider.getUriForFile(
+                    requireContext(),
+                    requireContext().getPackageName() + ".fileprovider",
+                    logFile);
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT,
+                    getString(R.string.notify_debug_log_share_subject));
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(shareIntent,
+                    getString(R.string.notify_debug_log_share_chooser)));
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to share debug log", e);
+            android.widget.Toast.makeText(requireContext(),
+                    getString(R.string.notify_debug_log_share_failed),
+                    android.widget.Toast.LENGTH_LONG).show();
+        }
     }
 }
