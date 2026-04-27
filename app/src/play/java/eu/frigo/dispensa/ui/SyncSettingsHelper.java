@@ -12,12 +12,16 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.IntentSenderRequest;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 
+import com.google.android.gms.auth.api.identity.AuthorizationRequest;
+import com.google.android.gms.auth.api.identity.AuthorizationResult;
+import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -28,6 +32,8 @@ import com.google.android.gms.tasks.Task;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.Executors;
 
 import eu.frigo.dispensa.R;
@@ -191,17 +197,36 @@ public class SyncSettingsHelper {
 
     /**
      * Handles the result returned from the Google Sign-In activity.  On success the
-     * account summary is refreshed and Drive sync is automatically enabled.
+     * account summary is refreshed and Drive scope authorization is launched as a
+     * separate step (required by the Identity API since play-services-auth 21.x).
      *
-     * @param fragment the host fragment
-     * @param result   the {@link ActivityResult} delivered to the launcher callback
+     * @param fragment   the host fragment
+     * @param result     the {@link ActivityResult} delivered to the sign-in launcher callback
+     * @param authLauncher the {@code ActivityResultLauncher<IntentSenderRequest>} used to show
+     *                   the Drive scope consent screen if the user has not yet granted it
      */
     public static void handleSignInResult(PreferenceFragmentCompat fragment,
-            ActivityResult result) {
+            ActivityResult result,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
         DebugLogger.i(TAG, "handleSignInResult: resultCode=" + result.getResultCode()
                 + " hasData=" + (result.getData() != null));
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
             DebugLogger.w(TAG, "Sign-in cancelled or failed (resultCode=" + result.getResultCode() + ")");
+            // When the sign-in activity returns data even on failure, extract the ApiException
+            // to get the specific status code (e.g. 12500=SIGN_IN_FAILED, 12501=SIGN_IN_CANCELLED).
+            // This is essential for diagnosing OAuth configuration problems.
+            if (result.getData() != null) {
+                try {
+                    GoogleSignIn.getSignedInAccountFromIntent(result.getData())
+                            .getResult(ApiException.class);
+                } catch (ApiException e) {
+                    DebugLogger.w(TAG, "Sign-in ApiException: statusCode=" + e.getStatusCode()
+                            + " message=" + e.getStatus().getStatusMessage());
+                }
+            }
+            Toast.makeText(fragment.requireContext(),
+                    fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
+                    Toast.LENGTH_SHORT).show();
             return;
         }
         Task<GoogleSignInAccount> task =
@@ -212,17 +237,10 @@ public class SyncSettingsHelper {
                     + " id=" + account.getId()
                     + " grantedScopes=" + account.getGrantedScopes());
 
-            // Auto-enable Drive sync now that the user is signed in
-            PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
-                    .edit()
-                    .putBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, true)
-                    .apply();
-
+            // Update the UI to show the signed-in email, then request Drive scopes.
+            // Drive sync is enabled only after the authorization step succeeds.
             refreshSignInState(fragment);
-            Toast.makeText(fragment.requireContext(),
-                    fragment.requireContext().getString(
-                            R.string.notify_sync_signed_in, account.getEmail()),
-                    Toast.LENGTH_SHORT).show();
+            launchDriveAuthorization(fragment, authLauncher);
 
         } catch (ApiException e) {
             DebugLogger.e(TAG, "Google Sign-In failed: statusCode=" + e.getStatusCode()
@@ -234,16 +252,23 @@ public class SyncSettingsHelper {
     }
 
     /**
-     * Called when the {@code sync_drive_enabled} toggle changes.  If Drive sync was enabled
-     * but the user is not yet signed in, the preference is reverted to {@code false} and the
-     * Google Sign-In flow is launched automatically.
+     * Called when the {@code sync_drive_enabled} toggle changes.
+     * <ul>
+     *   <li>If Drive sync was enabled but the user is not yet signed in, the preference is
+     *       reverted to {@code false} and the Google Sign-In flow is launched.</li>
+     *   <li>If the user is already signed in, Drive scope authorization is requested via
+     *       {@link Identity#getAuthorizationClient} so the toggle only stays on once the
+     *       required scopes have been granted.</li>
+     * </ul>
      *
-     * @param fragment the host fragment
-     * @param enabled  the new value of the Drive-sync toggle
-     * @param launcher the sign-in launcher registered in the fragment
+     * @param fragment     the host fragment
+     * @param enabled      the new value of the Drive-sync toggle
+     * @param signInLauncher the sign-in launcher registered in the fragment
+     * @param authLauncher   the Drive-authorization launcher registered in the fragment
      */
     public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
-            boolean enabled, ActivityResultLauncher<Intent> launcher) {
+            boolean enabled, ActivityResultLauncher<Intent> signInLauncher,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
         DebugLogger.i(TAG, "onDriveEnabledChanged: enabled=" + enabled);
         if (enabled) {
             GoogleSignInAccount account =
@@ -260,7 +285,12 @@ public class SyncSettingsHelper {
                 if (drivePref instanceof androidx.preference.CheckBoxPreference) {
                     ((androidx.preference.CheckBoxPreference) drivePref).setChecked(false);
                 }
-                launchSignIn(fragment.requireContext(), launcher);
+                launchSignIn(fragment.requireContext(), signInLauncher);
+            } else {
+                // Account present — verify Drive scope authorization.
+                // The toggle is left as-is; onDriveAuthorizationFailed() reverts it on error.
+                DebugLogger.i(TAG, "onDriveEnabledChanged: account present, checking Drive scopes");
+                launchDriveAuthorization(fragment, authLauncher);
             }
         }
         refreshSignInState(fragment);
@@ -567,17 +597,153 @@ public class SyncSettingsHelper {
                 .show();
     }
 
+    // ── Drive authorization (two-step flow) ───────────────────────────────────
+
+    /**
+     * Requests {@code DRIVE_APPDATA} and {@code DRIVE_FILE} authorization using the
+     * {@link Identity#getAuthorizationClient} API (required since play-services-auth 21.x;
+     * Drive scopes must be requested separately from sign-in).
+     *
+     * <p>If the user has already granted the scopes, {@link #completeDriveAuthorization} is
+     * called immediately (no UI shown).  Otherwise the consent screen is launched via
+     * {@code authLauncher} and the result is delivered to {@link #handleAuthorizationResult}.
+     *
+     * @param fragment    the host fragment
+     * @param authLauncher the {@code ActivityResultLauncher<IntentSenderRequest>} registered
+     *                    in the fragment's {@code onCreate()}
+     */
+    static void launchDriveAuthorization(PreferenceFragmentCompat fragment,
+            ActivityResultLauncher<IntentSenderRequest> authLauncher) {
+        DebugLogger.i(TAG, "launchDriveAuthorization: requesting DRIVE_APPDATA + DRIVE_FILE");
+        List<Scope> scopes = Arrays.asList(
+                new Scope(DriveScopes.DRIVE_APPDATA),
+                new Scope(DriveScopes.DRIVE_FILE));
+        AuthorizationRequest request = AuthorizationRequest.builder()
+                .setRequestedScopes(scopes)
+                .build();
+        Identity.getAuthorizationClient(fragment.requireActivity())
+                .authorize(request)
+                .addOnSuccessListener(authResult -> {
+                    if (authResult.hasResolution()) {
+                        DebugLogger.i(TAG, "launchDriveAuthorization: consent required, launching");
+                        try {
+                            authLauncher.launch(new IntentSenderRequest.Builder(
+                                    authResult.getPendingIntent().getIntentSender()).build());
+                        } catch (IllegalStateException e) {
+                            DebugLogger.e(TAG, "launchDriveAuthorization: failed to launch consent", e);
+                            onDriveAuthorizationFailed(fragment);
+                        }
+                    } else {
+                        DebugLogger.i(TAG, "launchDriveAuthorization: scopes already granted");
+                        completeDriveAuthorization(fragment, false);
+                    }
+                })
+                .addOnFailureListener(e -> {
+                    DebugLogger.e(TAG, "launchDriveAuthorization: authorize() failed", e);
+                    onDriveAuthorizationFailed(fragment);
+                });
+    }
+
+    /**
+     * Handles the result delivered from the Drive-scope consent screen.  On success,
+     * {@link #completeDriveAuthorization} is called to enable Drive sync; on failure or
+     * cancellation the toggle is reverted and an error toast is shown.
+     *
+     * @param fragment the host fragment
+     * @param result   the {@link ActivityResult} delivered to the authorization launcher
+     */
+    public static void handleAuthorizationResult(PreferenceFragmentCompat fragment,
+            ActivityResult result) {
+        DebugLogger.i(TAG, "handleAuthorizationResult: resultCode=" + result.getResultCode());
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
+            DebugLogger.w(TAG, "Drive authorization cancelled (resultCode="
+                    + result.getResultCode() + ")");
+            onDriveAuthorizationFailed(fragment);
+            return;
+        }
+        try {
+            AuthorizationResult authResult = Identity.getAuthorizationClient(fragment.requireActivity())
+                    .getAuthorizationResultFromIntent(result.getData());
+            DebugLogger.i(TAG, "handleAuthorizationResult: Drive scopes granted"
+                    + " hasToken=" + (authResult.getAccessToken() != null));
+            completeDriveAuthorization(fragment, true);
+        } catch (ApiException e) {
+            DebugLogger.e(TAG, "handleAuthorizationResult: ApiException statusCode="
+                    + e.getStatusCode(), e);
+            onDriveAuthorizationFailed(fragment);
+        }
+    }
+
+    /**
+     * Finalises Drive sync enablement after a successful authorization.
+     *
+     * <p>Enables the {@code sync_drive_enabled} preference if it is not already on, refreshes
+     * the sign-in state, and optionally shows a confirmation toast.
+     *
+     * @param fragment      the host fragment
+     * @param alwaysToast   {@code true} when the user just completed the consent screen and
+     *                      must see feedback regardless of the previous toggle state; {@code
+     *                      false} when scopes were already granted and a toast is only shown
+     *                      if Drive sync was not yet enabled
+     */
+    private static void completeDriveAuthorization(PreferenceFragmentCompat fragment,
+            boolean alwaysToast) {
+        boolean wasEnabled = PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
+                .getBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false);
+        if (!wasEnabled) {
+            PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
+                    .edit()
+                    .putBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, true)
+                    .apply();
+        }
+        refreshSignInState(fragment);
+        if (alwaysToast || !wasEnabled) {
+            GoogleSignInAccount account =
+                    GoogleSignIn.getLastSignedInAccount(fragment.requireContext());
+            String email = (account != null && account.getEmail() != null)
+                    ? account.getEmail() : "";
+            DebugLogger.i(TAG, "completeDriveAuthorization: Drive sync enabled, email=" + email);
+            Toast.makeText(fragment.requireContext(),
+                    fragment.requireContext().getString(R.string.notify_sync_signed_in, email),
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Called when Drive scope authorization has failed or been cancelled.
+     * Reverts the Drive sync toggle to {@code false} and shows an error toast.
+     */
+    private static void onDriveAuthorizationFailed(PreferenceFragmentCompat fragment) {
+        DebugLogger.w(TAG, "onDriveAuthorizationFailed: reverting Drive sync toggle");
+        PreferenceManager.getDefaultSharedPreferences(fragment.requireContext())
+                .edit()
+                .putBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false)
+                .apply();
+        Preference drivePref = fragment.findPreference(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED);
+        if (drivePref instanceof androidx.preference.CheckBoxPreference) {
+            ((androidx.preference.CheckBoxPreference) drivePref).setChecked(false);
+        }
+        Toast.makeText(fragment.requireContext(),
+                fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
+                Toast.LENGTH_SHORT).show();
+    }
+
     private static void launchSignIn(Context context, ActivityResultLauncher<Intent> launcher) {
-        DebugLogger.i(TAG, "launchSignIn: requesting DRIVE_APPDATA + DRIVE_FILE scopes");
+        DebugLogger.i(TAG, "launchSignIn: requesting email (Drive scopes authorized separately)");
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(
                 GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestEmail()
-                .requestScopes(new Scope(DriveScopes.DRIVE_APPDATA))
-                .requestScopes(new Scope(DriveScopes.DRIVE_FILE))
                 .build();
         GoogleSignInClient client = GoogleSignIn.getClient(context, options);
         DebugLogger.i(TAG, "launchSignIn: launching sign-in intent");
-        launcher.launch(client.getSignInIntent());
+        try {
+            launcher.launch(client.getSignInIntent());
+        } catch (IllegalStateException e) {
+            DebugLogger.e(TAG, "launchSignIn: failed to launch sign-in intent", e);
+            Toast.makeText(context,
+                    context.getString(R.string.notify_sync_sign_in_failed),
+                    Toast.LENGTH_SHORT).show();
+        }
     }
 
     private static void signOut(Context context, Preference driveEnabledPref,
