@@ -773,7 +773,7 @@ The host creates the sync file; shares it as "Anyone with the link can edit". Th
 
 #### Recommended Implementation Plan (Pathway 1)
 
-This would be Session 12 work; it builds on Session 11 (`SyncPermissionManager`):
+This would be Session 11 work (implemented independently of Session 12):
 
 1. **Scope change:** Add `DriveScopes.DRIVE_FILE` to `GoogleSignInOptions` alongside (or instead of) `DRIVE_APPDATA`. Keep `DRIVE_APPDATA` as a fallback for single-user mode.
 2. **New `HouseholdManager` class** (`play/` flavor):
@@ -791,9 +791,9 @@ This would be Session 12 work; it builds on Session 11 (`SyncPermissionManager`)
    - The join invitation URI: `dispensa://household?folderId=<id>` — handled by a new `<intent-filter>` in `AndroidManifest.xml`.
    - The Settings UI shows the deep-link as a scannable QR code (using ZXing or a simple Bitmap renderer).
 
-This plan would be implemented as Session 12.
+This plan would be implemented as Session 11.
 
-### Handoff to Session 11 — Sharing Permission Management
+### Handoff to Session 12 — Sharing Permission Management
 
 **Next session goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
 
@@ -814,7 +814,7 @@ This plan would be implemented as Session 12.
 
 ---
 
-## Session 12 — Multi-Account Household Drive Sync
+## Session 11 — Multi-Account Household Drive Sync
 
 **Date:** 2026-04-27  
 **Goal:** Implement Pathway 1 from Session 10's Drive sharing analysis: a shared "Dispensa Household" Google Drive folder with per-device JSON files and a deep-link join flow.
@@ -874,7 +874,7 @@ This plan would be implemented as Session 12.
 
 ### Handoff to Session 13
 
-- **What to do next:** Session 11 (`SyncPermissionManager` for device allowlisting on the local-network transport) remains unimplemented and is still the next logical step before finalizing the release.
+- **What to do next:** Session 12 (`SyncPermissionManager` for device allowlisting on the local-network transport) remains unimplemented and is still the next logical step before finalizing the release.
 - **Household sync is live in play flavor.** Remaining polish:
   - Copy-to-clipboard button in the deep-link dialog (currently just a selectable EditText).
   - QR code generation for the join link (requires `zxing` dependency).
@@ -888,7 +888,7 @@ This plan would be implemented as Session 12.
 
 ---
 
-## Session 11 — Sharing Permission Management
+## Session 12 — Sharing Permission Management
 
 **Date:** 2026-04-27  
 **Goal:** Add a device allowlist for local-network sync so only explicitly trusted devices can exchange changes.
@@ -912,7 +912,7 @@ This plan would be implemented as Session 12.
   - Layout: `fragment_manage_sync_devices.xml` — MaterialToolbar + ScrollView with a programmatically populated LinearLayout.
 - **`preferences.xml`:** added `sync_manage_devices` preference after `sync_local_scan_peers`.
 - **`SettingsFragment.onPreferenceTreeClick()`:** added case for `sync_manage_devices` → fragment replace to `ManageSyncDevicesFragment`, matching the `ManageLocationsFragment` pattern.
-- **Drive sharing info pref:** skipped — Session 12's `KEY_HOUSEHOLD_STATUS` already surfaces the sync mode in the UI; adding a redundant info pref would clutter the settings screen.
+- **Drive sharing info pref:** skipped — Session 11's `KEY_HOUSEHOLD_STATUS` already surfaces the sync mode in the UI; adding a redundant info pref would clutter the settings screen.
 - **`SyncManagerTest`:** updated 3 test usages of `new SyncBlob(...)` to pass `senderDeviceId` (constructor changed).
 - **`GoogleDriveSyncTransport.HouseholdDriveOperations.downloadSyncFile()`:** updated `new SyncBlob(...)` call — passes `null` for the merged household blob (multi-source, Drive sync bypasses the trust check).
 - Added 12 string resources each to `strings.xml` (en) and `strings.xml` (it).
@@ -933,7 +933,7 @@ This plan would be implemented as Session 12.
 - `app/src/test/java/eu/frigo/dispensa/sync/SyncPermissionManagerTest.java` — new file; 11 unit tests
 - `app/src/test/java/eu/frigo/dispensa/sync/SyncManagerTest.java` — updated 3 `SyncBlob` constructor calls
 - `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` — updated `SyncBlob` constructor call in `HouseholdDriveOperations`
-- `PLAN.md` — Session 11 tasks marked complete
+- `PLAN.md` — Session 12 tasks marked complete
 
 ### Test results
 
@@ -942,12 +942,12 @@ This plan would be implemented as Session 12.
 
 ### Handoff to Session 13
 
-- Session 11 is now complete. Session 12 (Household Drive Sync) was already done.
-- **Remaining polish from Session 12:**
+- Session 12 is now complete. Session 11 (Household Drive Sync) was already done.
+- **Remaining polish from Session 11:**
   - Copy-to-clipboard button in the household deep-link dialog.
   - QR code generation for the join link (requires `zxing` dependency).
   - Household folder name lookup on status preference (show friendly name instead of folder ID).
-- **Session 11 device trust UX note:** When a user first enables local network sync, ALL other Dispensa devices will appear as "pending" until explicitly approved. This is intentional (strict trust model). Users must open Settings → Manage trusted devices to approve peers. Consider adding a notification or badge to the preference summary when new pending devices arrive.
+- **Session 12 device trust UX note:** When a user first enables local network sync, ALL other Dispensa devices will appear as "pending" until explicitly approved. This is intentional (strict trust model). Users must open Settings → Manage trusted devices to approve peers. Consider adding a notification or badge to the preference summary when new pending devices arrive.
 - **Conventions established this session:**
   - `SyncPermissionManager` uses its own `SharedPreferences` file (`sync_permissions`) to avoid polluting the app-wide default prefs.
   - `LocalNetworkSyncTransport`'s 4-parameter test constructor chains to the 5-parameter one with `null` permission manager — tests that don't need trust enforcement pass `null` and are unaffected.

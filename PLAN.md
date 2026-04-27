@@ -265,24 +265,7 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
-### Session 11 — Sharing Permission Management ✅
-
-**Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
-
-- [x] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
-- [x] Add `senderDeviceId` field to `SyncBlob`; populate in `SyncManager.exportChanges()`; add `SyncManager.extractSenderDeviceId()` helper
-- [x] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob and reject unknown devices (including those without an ID); add `SyncPermissionManager` dependency
-- [x] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke/dismiss actions
-- [x] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
-- [x] Drive sharing info preference superseded by Session 12's `KEY_HOUSEHOLD_STATUS`; skipped to avoid redundancy
-- [x] Add string resources (en + it)
-- [x] Write unit tests for `SyncPermissionManager` (11 tests)
-
-**Tests:** 103 unit tests pass (fdroid + play combined).
-
----
-
-### Session 12 — Multi-Account Household Drive Sync ✅
+### Session 11 — Multi-Account Household Drive Sync ✅
 
 **Goal:** Implement shared-folder Drive sync so multiple Google accounts can sync the same pantry (Pathway 1 from the Session 10 analysis).
 
@@ -302,3 +285,20 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Sign-out also clears household folder ID
 
 **Tests:** 54 unit tests pass; both flavors BUILD SUCCESSFUL.
+
+---
+
+### Session 12 — Sharing Permission Management ✅
+
+**Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
+
+- [x] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
+- [x] Add `senderDeviceId` field to `SyncBlob`; populate in `SyncManager.exportChanges()`; add `SyncManager.extractSenderDeviceId()` helper
+- [x] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob and reject unknown devices (including those without an ID); add `SyncPermissionManager` dependency
+- [x] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke/dismiss actions
+- [x] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
+- [x] Drive sharing info preference superseded by Session 11's `KEY_HOUSEHOLD_STATUS`; skipped to avoid redundancy
+- [x] Add string resources (en + it)
+- [x] Write unit tests for `SyncPermissionManager` (11 tests)
+
+**Tests:** 103 unit tests pass (fdroid + play combined).

@@ -109,7 +109,9 @@ public class SyncPermissionManager {
      */
     public Set<String> getTrustedDeviceIds() {
         Set<String> stored = prefs.getStringSet(PREF_TRUSTED, null);
-        return stored != null ? Collections.unmodifiableSet(stored) : Collections.emptySet();
+        return stored != null
+                ? Collections.unmodifiableSet(new HashSet<>(stored))
+                : Collections.emptySet();
     }
 
     /**
@@ -117,6 +119,8 @@ public class SyncPermissionManager {
      */
     public Set<String> getPendingDeviceIds() {
         Set<String> stored = prefs.getStringSet(PREF_PENDING, null);
-        return stored != null ? Collections.unmodifiableSet(stored) : Collections.emptySet();
+        return stored != null
+                ? Collections.unmodifiableSet(new HashSet<>(stored))
+                : Collections.emptySet();
     }
 }
