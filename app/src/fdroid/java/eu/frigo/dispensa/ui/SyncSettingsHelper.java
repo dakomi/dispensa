@@ -1,5 +1,9 @@
 package eu.frigo.dispensa.ui;
 
+import android.content.Intent;
+
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.preference.PreferenceFragmentCompat;
 
 /**
@@ -12,17 +16,21 @@ public class SyncSettingsHelper {
 
     private SyncSettingsHelper() {}
 
-    /**
-     * No-op for the F-Droid flavor — Drive preferences are not injected.
-     */
-    public static void setup(PreferenceFragmentCompat fragment) {
-        // Drive sync is not available in the F-Droid build.
-    }
+    /** No-op — Drive preferences are not available in the F-Droid build. */
+    public static void setup(PreferenceFragmentCompat fragment) {}
 
-    /**
-     * No-op for the F-Droid flavor.
-     */
-    public static void refreshAccountSummary(PreferenceFragmentCompat fragment) {
-        // Drive sync is not available in the F-Droid build.
-    }
+    /** No-op — Drive sync is not available in the F-Droid build. */
+    public static void refreshAccountSummary(PreferenceFragmentCompat fragment) {}
+
+    /** No-op — Drive sync is not available in the F-Droid build. */
+    public static void setSignInLauncher(PreferenceFragmentCompat fragment,
+            ActivityResultLauncher<Intent> launcher) {}
+
+    /** No-op — Drive sync is not available in the F-Droid build. */
+    public static void handleSignInResult(PreferenceFragmentCompat fragment,
+            ActivityResult result) {}
+
+    /** No-op — Drive sync is not available in the F-Droid build. */
+    public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
+            boolean enabled, ActivityResultLauncher<Intent> launcher) {}
 }

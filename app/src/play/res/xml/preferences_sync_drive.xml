@@ -8,6 +8,14 @@
         app:defaultValue="false"
         app:iconSpaceReserved="false"/>
 
+    <!-- Shown when NOT signed in -->
+    <Preference
+        app:key="sync_drive_sign_in"
+        app:title="@string/pref_sync_drive_sign_in_title"
+        app:summary="@string/pref_sync_drive_sign_in_summary"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Shown when signed in -->
     <Preference
         app:key="sync_drive_account"
         app:title="@string/pref_sync_drive_account_title"
