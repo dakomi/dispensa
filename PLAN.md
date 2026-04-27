@@ -206,22 +206,51 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
-### Session 8 — Google Sign-In Flow
+### Session 7 — ProGuard & Final Integration ✅
 
-**Goal:** Add a "Sign In with Google" button and flow so users can authenticate before enabling Drive sync.
+**Goal:** Add ProGuard rules, run full integration validation, update documentation.
 
-- [ ] Add `sync_drive_sign_in` preference to `app/src/play/res/xml/preferences_sync_drive.xml`
-- [ ] Rewrite `SyncSettingsHelper` (play) to: show sign-in button when not signed in; show account + sign-out when signed in; wire sign-in button → launch `GoogleSignInClient.getSignInIntent()`; handle sign-in result to update UI + auto-enable Drive sync
-- [ ] Add no-op `setSignInLauncher()`, `handleSignInResult()`, `onDriveEnabledChanged()` to `SyncSettingsHelper` (fdroid)
-- [ ] Update `SettingsFragment` to register `ActivityResultLauncher<Intent>` in `onCreate()` and call `SyncSettingsHelper.setSignInLauncher()` / `SyncSettingsHelper.onDriveEnabledChanged()`
-- [ ] Add string resources for sign-in button (en + it)
-- [ ] Verify compilation on both flavors
+- [x] Add to `app/proguard-rules.pro`:
+  - `eu.frigo.dispensa.sync.**` keep rule
+  - Gson serialization keep rules for `SyncChange` / `SyncBlob`
+- [x] Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors
+- [x] Run `./gradlew lint` — fix any new warnings
+- [x] Run full test suite: `./gradlew testFdroidDebugUnitTest` + `./gradlew testPlayDebugUnitTest`
+- [x] Update `README.md` with sync feature description
+- [x] Mark all sessions complete in this file
 
-**Tests:** Compile verification on fdroid + play flavors.
+**Tests:** Full build + lint + unit test pass on both flavors.
 
 ---
 
-### Session 9 — Peer Discovery & Pairing UI
+### Session 8 — Release v0.1.9.1 ✅
+
+**Goal:** Bump version and publish release APKs via GitHub Actions.
+
+- [x] Bump `versionCode` / `versionName` in `app/build.gradle.kts`
+- [x] Add `signingConfigs.release` block reading credentials from env vars
+- [x] Create `.github/workflows/release.yml` for fdroid + play release APKs
+
+**Tests:** Release workflow verified manually.
+
+---
+
+### Session 9 — Google Sign-In Flow ✅
+
+**Goal:** Add a "Sign In with Google" button and flow so users can authenticate before enabling Drive sync.
+
+- [x] Add `sync_drive_sign_in` preference to `app/src/play/res/xml/preferences_sync_drive.xml`
+- [x] Rewrite `SyncSettingsHelper` (play): sign-in button, visibility toggling, `setSignInLauncher`, `handleSignInResult`, `onDriveEnabledChanged`
+- [x] Add no-op stubs to `SyncSettingsHelper` (fdroid): `setSignInLauncher`, `handleSignInResult`, `onDriveEnabledChanged`
+- [x] Update `SettingsFragment`: register `ActivityResultLauncher<Intent>` in `onCreate()`, call `setSignInLauncher()` after setup, wire `sync_drive_enabled` toggle
+- [x] Add string resources (en + it): `pref_sync_drive_sign_in_title/summary`, `notify_sync_signed_in`, `notify_sync_sign_in_failed`
+- [x] Both flavors compile; all 74 unit tests pass
+
+**Tests:** Compile verification on fdroid + play; all unit tests pass.
+
+---
+
+### Session 10 — Peer Discovery & Pairing UI
 
 **Goal:** Surface local-network peer discovery status and add an explicit Drive connection-test button.
 
@@ -236,7 +265,7 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
-### Session 10 — Sharing Permission Management
+### Session 11 — Sharing Permission Management
 
 **Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
 
@@ -249,20 +278,3 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [ ] Write unit tests for `SyncPermissionManager`
 
 **Tests:** JUnit 4 unit tests for `SyncPermissionManager`.
-
----
-
-### Session 7 — ProGuard & Final Integration
-
-**Goal:** Add ProGuard rules, run full integration validation, update documentation.
-
-- [x] Add to `app/proguard-rules.pro`:
-  - `eu.frigo.dispensa.sync.**` keep rule
-  - Gson serialization keep rules for `SyncChange` / `SyncBlob`
-- [x] Run `./gradlew assembleFdroidRelease` and `./gradlew assemblePlayRelease` — verify no R8/ProGuard errors
-- [x] Run `./gradlew lint` — fix any new warnings
-- [x] Run full test suite: `./gradlew testFdroidDebugUnitTest` + `./gradlew testPlayDebugUnitTest`
-- [x] Update `README.md` with sync feature description
-- [x] Mark all sessions complete in this file
-
-**Tests:** Full build + lint + unit test pass on both flavors.
