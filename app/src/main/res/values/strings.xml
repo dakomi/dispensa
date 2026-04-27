@@ -245,6 +245,35 @@
     <string name="sync_scan_peers_dialog_title">Nearby Dispensa devices</string>
     <string name="sync_scan_peers_none">No Dispensa devices found on this network.</string>
 
+    <!-- Household sync (play flavor) -->
+    <string name="pref_sync_drive_household_status_title">Household status</string>
+    <string name="pref_sync_drive_household_status_solo">Solo mode — only this device syncs</string>
+    <string name="pref_sync_drive_household_status_active">Household active (folder: %1$s)</string>
+    <string name="pref_sync_drive_create_household_title">Create household</string>
+    <string name="pref_sync_drive_create_household_summary">Share your pantry with other Google accounts</string>
+    <string name="pref_sync_drive_join_household_title">Join household</string>
+    <string name="pref_sync_drive_join_household_summary">Join a shared pantry using an invite link or folder ID</string>
+    <string name="pref_sync_drive_leave_household_title">Leave household</string>
+    <string name="pref_sync_drive_leave_household_summary">Stop syncing with shared household; revert to solo mode</string>
+    <string name="dialog_create_household_title">Create household</string>
+    <string name="dialog_create_household_message">Enter the Google account email(s) of household members to invite (comma or space separated). Leave blank to create first and share the link manually.</string>
+    <string name="dialog_create_household_ok">Create</string>
+    <string name="dialog_join_household_title">Join household</string>
+    <string name="dialog_join_household_message">Paste the invite link (dispensa://household?…) or the folder ID shared by the household host.</string>
+    <string name="dialog_join_household_ok">Join</string>
+    <string name="dialog_leave_household_title">Leave household?</string>
+    <string name="dialog_leave_household_message">You will stop syncing with the shared household folder. Your existing pantry data will not be deleted.</string>
+    <string name="dialog_leave_household_ok">Leave</string>
+    <string name="dialog_household_link_title">Share this link</string>
+    <string name="dialog_household_link_message">Copy and share this invite link with household members. They can paste it into Dispensa to join.</string>
+    <string name="hint_household_emails">e.g. alice@gmail.com, bob@gmail.com</string>
+    <string name="hint_household_folder_id">Paste invite link or folder ID</string>
+    <string name="notify_household_joined">Joined household ✓</string>
+    <string name="notify_household_left">Left household — reverted to solo mode</string>
+    <string name="err_household_create">Failed to create household: %1$s</string>
+    <string name="err_household_join">Failed to join household: %1$s</string>
+    <string name="err_household_join_not_found">Household not found. Check the folder ID and make sure you were invited.</string>
+
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">No product found for this barcode</string>
     <string name="consume_product_confirm">Do you want to consume 1 of %1$s (Expiry: %2$s)?</string>

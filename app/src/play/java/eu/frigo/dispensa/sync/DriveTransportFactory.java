@@ -12,7 +12,17 @@ import androidx.preference.PreferenceManager;
  *
  * <p>Returns a {@link GoogleDriveSyncTransport} when both the {@code sync_drive_enabled}
  * preference is {@code true} and the user has a signed-in Google account.
- * Returns {@code null} otherwise so the caller can skip the Drive sync cycle gracefully.
+ *
+ * <h3>Household mode</h3>
+ * When {@link HouseholdManager#getHouseholdFolderId(Context)} returns a non-null folder ID
+ * the transport operates in <em>household mode</em>: each device uploads its own
+ * {@code dispensa_{deviceId}.json} file to the shared folder and downloads all peer files
+ * on sync.
+ *
+ * <p>Falls back to <em>solo mode</em> (single {@code appDataFolder} file) when no household
+ * folder ID is stored or when the device ID has not yet been initialised.
+ *
+ * <p>Returns {@code null} if Drive sync is disabled or the user is not signed in.
  */
 public class DriveTransportFactory {
 
@@ -28,7 +38,8 @@ public class DriveTransportFactory {
      * is disabled or the user is not signed in.
      *
      * @param context     application context
-     * @param syncManager the shared {@link SyncManager} instance
+     * @param syncManager the shared {@link SyncManager} instance (unused currently; kept for
+     *                    API compatibility)
      * @return a ready-to-use transport, or {@code null}
      */
     public static SyncTransport create(Context context, SyncManager syncManager) {
@@ -39,6 +50,18 @@ public class DriveTransportFactory {
 
         GoogleSignInAccount signInAccount = GoogleSignIn.getLastSignedInAccount(context);
         if (signInAccount == null || signInAccount.getAccount() == null) return null;
+
+        String householdFolderId = HouseholdManager.getHouseholdFolderId(context);
+        if (householdFolderId != null) {
+            // Device ID is initialised by SyncManager; fall back to solo mode if not yet set.
+            String deviceId = PreferenceManager
+                    .getDefaultSharedPreferences(context)
+                    .getString(SyncManager.PREFS_KEY_DEVICE_ID, null);
+            if (deviceId != null) {
+                return new GoogleDriveSyncTransport(context, signInAccount.getAccount(),
+                        householdFolderId, deviceId);
+            }
+        }
 
         return new GoogleDriveSyncTransport(context, signInAccount.getAccount());
     }

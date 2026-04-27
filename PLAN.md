@@ -278,3 +278,26 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [ ] Write unit tests for `SyncPermissionManager`
 
 **Tests:** JUnit 4 unit tests for `SyncPermissionManager`.
+
+---
+
+### Session 12 — Multi-Account Household Drive Sync ✅
+
+**Goal:** Implement shared-folder Drive sync so multiple Google accounts can sync the same pantry (Pathway 1 from the Session 10 analysis).
+
+- [x] Create `HouseholdManager` (play) — `createHousehold`, `grantAccess`, `verifyAndJoin`, `generateJoinDeepLink`, `buildDrive`, SharedPreferences helpers
+- [x] Add `HouseholdDriveOperations` inner class to `GoogleDriveSyncTransport` — per-device files in shared folder, merged peer download, `DRIVE_FILE` scope
+- [x] Add household-mode constructor to `GoogleDriveSyncTransport(Context, Account, folderId, deviceId)`
+- [x] Update `DriveTransportFactory` — route to household transport when `HouseholdManager.getHouseholdFolderId()` is non-null
+- [x] Update `SyncSettingsHelper` (play) — `DRIVE_FILE` scope in sign-in options; create/join/leave household dialogs; `handleHouseholdDeepLink()`; `refreshSignInState()` shows household status
+- [x] Add no-op `handleHouseholdDeepLink()` to `SyncSettingsHelper` (fdroid)
+- [x] Add 4 household prefs to `preferences_sync_drive.xml` (play): status, create, join, leave
+- [x] Add deep-link intent-filter (`dispensa://household?folderId=…`) to `SettingsActivity` in `AndroidManifest.xml`
+- [x] Update `SettingsActivity` to parse deep-link and pass folderId to `SettingsFragment` as Bundle arg
+- [x] Add `ARG_HOUSEHOLD_FOLDER_ID` to `SettingsFragment`; call `handleHouseholdDeepLink()` when arg is present
+- [x] Add 19 string resources each for en + it
+- [x] Write `HouseholdManagerTest` (9 unit tests)
+- [x] Both flavors compile; all 54 unit tests pass (play + fdroid combined)
+- [x] Sign-out also clears household folder ID
+
+**Tests:** 54 unit tests pass; both flavors BUILD SUCCESSFUL.

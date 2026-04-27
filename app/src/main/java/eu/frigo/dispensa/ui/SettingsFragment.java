@@ -61,6 +61,12 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     public static final String KEY_SYNC_LOCAL_PEERS_STATUS = "sync_local_peers_status";
     public static final String KEY_SYNC_LOCAL_SCAN_PEERS = "sync_local_scan_peers";
 
+    /**
+     * Fragment argument key that carries a household folder ID from a deep-link Intent.
+     * If present, the join-household dialog is automatically shown after setup.
+     */
+    public static final String ARG_HOUSEHOLD_FOLDER_ID = "household_folder_id";
+
     /** Duration (ms) to scan for NSD peers before stopping. */
     private static final long PEER_SCAN_DURATION_MS = 5_000L;
 
@@ -184,6 +190,15 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         // Inject play-flavor Drive preferences (no-op in fdroid flavor)
         SyncSettingsHelper.setup(this);
         SyncSettingsHelper.setSignInLauncher(this, googleSignInLauncher);
+
+        // Handle household deep-link if the activity received one
+        Bundle args = getArguments();
+        if (args != null) {
+            String householdFolderId = args.getString(ARG_HOUSEHOLD_FOLDER_ID);
+            if (householdFolderId != null) {
+                SyncSettingsHelper.handleHouseholdDeepLink(this, householdFolderId);
+            }
+        }
     }
 
     private void clearOpenFoodFactCache() {
