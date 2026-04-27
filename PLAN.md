@@ -206,6 +206,52 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 ---
 
+### Session 8 — Google Sign-In Flow
+
+**Goal:** Add a "Sign In with Google" button and flow so users can authenticate before enabling Drive sync.
+
+- [ ] Add `sync_drive_sign_in` preference to `app/src/play/res/xml/preferences_sync_drive.xml`
+- [ ] Rewrite `SyncSettingsHelper` (play) to: show sign-in button when not signed in; show account + sign-out when signed in; wire sign-in button → launch `GoogleSignInClient.getSignInIntent()`; handle sign-in result to update UI + auto-enable Drive sync
+- [ ] Add no-op `setSignInLauncher()`, `handleSignInResult()`, `onDriveEnabledChanged()` to `SyncSettingsHelper` (fdroid)
+- [ ] Update `SettingsFragment` to register `ActivityResultLauncher<Intent>` in `onCreate()` and call `SyncSettingsHelper.setSignInLauncher()` / `SyncSettingsHelper.onDriveEnabledChanged()`
+- [ ] Add string resources for sign-in button (en + it)
+- [ ] Verify compilation on both flavors
+
+**Tests:** Compile verification on fdroid + play flavors.
+
+---
+
+### Session 9 — Peer Discovery & Pairing UI
+
+**Goal:** Surface local-network peer discovery status and add an explicit Drive connection-test button.
+
+- [ ] Add `sync_local_peers_status` read-only preference to `preferences.xml` showing discovered peer count
+- [ ] Add `sync_local_scan_peers` tappable preference button that runs a short NSD scan and displays results in a dialog
+- [ ] Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) that verifies Drive connectivity and reports success/failure
+- [ ] Update `SyncSettingsHelper` (play) to wire the Drive test-connection button
+- [ ] Update `SettingsFragment` to wire the local-scan button; add a `PeerScanDialogFragment` that shows discovered peer names/IPs
+- [ ] Add string resources (en + it)
+
+**Tests:** Compile verification on both flavors.
+
+---
+
+### Session 10 — Sharing Permission Management
+
+**Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
+
+- [ ] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
+- [ ] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob header and reject unknown devices (returns empty/error response); add `SyncPermissionManager` dependency
+- [ ] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke actions
+- [ ] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
+- [ ] Add Drive sharing info preference: explain that Drive sync shares data across all devices signed into the same Google account
+- [ ] Add string resources (en + it)
+- [ ] Write unit tests for `SyncPermissionManager`
+
+**Tests:** JUnit 4 unit tests for `SyncPermissionManager`.
+
+---
+
 ### Session 7 — ProGuard & Final Integration
 
 **Goal:** Add ProGuard rules, run full integration validation, update documentation.

@@ -1,11 +1,14 @@
 package eu.frigo.dispensa.ui;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.format.DateFormat;
 import android.util.Log;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 import androidx.preference.EditTextPreference;
@@ -23,6 +26,7 @@ import java.util.Locale;
 import java.util.Objects;
 
 import eu.frigo.dispensa.R;
+import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.util.LocaleHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
 import eu.frigo.dispensa.work.SyncWorker;
@@ -51,6 +55,17 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     private Preference notificationTimePreference;
     private Preference syncLastTimestampPreference;
     private ListPreference languagePreference;
+    private ActivityResultLauncher<Intent> googleSignInLauncher;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // Register the Google Sign-In launcher before the fragment is started.
+        // The result is dispatched to SyncSettingsHelper (no-op in fdroid flavor).
+        googleSignInLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> SyncSettingsHelper.handleSignInResult(this, result));
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -140,6 +155,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
 
         // Inject play-flavor Drive preferences (no-op in fdroid flavor)
         SyncSettingsHelper.setup(this);
+        SyncSettingsHelper.setSignInLauncher(this, googleSignInLauncher);
     }
 
     private void clearOpenFoodFactCache() {
@@ -255,6 +271,12 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 SyncWorkerScheduler.cancelPeriodicSync(context);
                 Log.d(TAG, "Local network sync disabled — periodic work cancelled.");
             }
+        } else if (DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED.equals(key)) {
+            if (context == null) return;
+            boolean enabled = sharedPreferences.getBoolean(key, false);
+            // In play flavor: auto-launches sign-in if user is not yet authenticated.
+            // In fdroid flavor: no-op.
+            SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleSignInLauncher);
         }
     }
     private void updateLanguagePreferenceSummary(String languageValue) {

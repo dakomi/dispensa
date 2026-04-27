@@ -228,6 +228,10 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_sync_drive_sign_out_summary">Rimuovi l\'account Google da questo dispositivo</string>
     <string name="notify_sync_triggered">Sincronizzazione avviata</string>
     <string name="notify_sync_signed_out">Disconnesso da Google</string>
+    <string name="pref_sync_drive_sign_in_title">Accedi con Google</string>
+    <string name="pref_sync_drive_sign_in_summary">Accedi per abilitare la sincronizzazione con Google Drive</string>
+    <string name="notify_sync_signed_in">Connesso come %1$s</string>
+    <string name="notify_sync_sign_in_failed">Accesso a Google non riuscito. Riprova.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">Nessun prodotto trovato con questo codice a barre</string>

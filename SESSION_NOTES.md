@@ -630,3 +630,70 @@ To trigger the release:
 1. Set the four repository secrets: `KEYSTORE_BASE64` (base64-encoded `.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
 2. Go to **Actions → Release → Run workflow** and enter `v0.1.9.1` as the tag.  
    Alternatively push a `v0.1.9.1` tag: `git tag v0.1.9.1 && git push origin v0.1.9.1`.
+
+---
+
+## Session 9 — Google Sign-In Flow
+
+**Date:** 2026-04-27
+**Goal:** Add a "Sign In with Google" button and complete the Drive authentication flow so users can actually authenticate before Drive sync runs.
+
+### What was done
+
+- **Identified the three fatal flaws** reported by the user: (1) no sign-in button/flow for Google Drive; (2) no pairing/discovery button/flow for Drive or local sync; (3) no sharing permission management. Added Sessions 9, 10, 11 to `PLAN.md` (renumbered here as 9/10/11 to avoid collision with the existing Session 8 release session).
+- Added `sync_drive_sign_in` preference to `app/src/play/res/xml/preferences_sync_drive.xml` — shows "Sign in with Google" when not signed in, hidden when signed in.
+- Rewrote `SyncSettingsHelper` (play flavor) to:
+  - Toggle visibility of sign-in button vs. account email + sign-out button based on `GoogleSignIn.getLastSignedInAccount()` state.
+  - New `setSignInLauncher(fragment, launcher)` — wires the sign-in preference click to launch `GoogleSignInClient.getSignInIntent()`.
+  - New `handleSignInResult(fragment, result)` — on `RESULT_OK`, extracts `GoogleSignInAccount`, auto-enables `sync_drive_enabled`, refreshes UI, shows "Signed in as …" Toast; on failure shows error Toast.
+  - New `onDriveEnabledChanged(fragment, enabled, launcher)` — when the Drive toggle is turned ON but the user is not signed in, reverts the toggle to `false` and auto-launches sign-in.
+  - New `refreshSignInState(fragment)` private helper — updates `setVisible()` on all three Drive auth prefs.
+  - `refreshAccountSummary()` now delegates to `refreshSignInState()`.
+  - Sign-in options request `DriveScopes.DRIVE_APPDATA` scope alongside email so the user sees the precise Drive permission grant during sign-in.
+- Updated `SyncSettingsHelper` (fdroid) — added no-op stubs for `setSignInLauncher`, `handleSignInResult`, `onDriveEnabledChanged` to keep the class interface identical across flavors.
+- Updated `SettingsFragment` (main):
+  - Added `import android.content.Intent`, `ActivityResultLauncher`, `ActivityResultContracts`.
+  - Added `import eu.frigo.dispensa.sync.DriveTransportFactory`.
+  - Added field `private ActivityResultLauncher<Intent> googleSignInLauncher`.
+  - Added `onCreate()` override that registers the launcher with `registerForActivityResult(StartActivityForResult, result → SyncSettingsHelper.handleSignInResult(...))`.
+  - In `onCreatePreferences`: calls `SyncSettingsHelper.setSignInLauncher(this, googleSignInLauncher)` after `setup()`.
+  - In `onSharedPreferenceChanged`: added `DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED` branch that calls `SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleSignInLauncher)`.
+- Added string resources (en + it): `pref_sync_drive_sign_in_title`, `pref_sync_drive_sign_in_summary`, `notify_sync_signed_in` (uses `%1$s` for email), `notify_sync_sign_in_failed`.
+
+### Files changed
+
+- `app/src/play/res/xml/preferences_sync_drive.xml` — added `sync_drive_sign_in` preference
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — full rewrite with sign-in flow
+- `app/src/fdroid/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — added no-op method stubs
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — added launcher, Drive toggle handling
+- `app/src/main/res/values/strings.xml` — 4 new sign-in string resources (en)
+- `app/src/main/res/values-it/strings.xml` — 4 new sign-in string resources (it)
+- `PLAN.md` — added Sessions 8, 9, 10 (the missing-flows plan)
+
+### Test results
+
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all 29 fdroid + 45 play unit tests pass (unchanged)
+
+### Handoff to Session 10 — Peer Discovery & Pairing UI
+
+**Next session goal:** Surface local-network peer discovery status and add a Drive connection-test button.
+
+**Specific tasks:**
+1. Add `sync_local_peers_status` read-only preference to `preferences.xml` (shows discovered peer count; updated after scan).
+2. Add `sync_local_scan_peers` tappable preference button → runs a short NSD scan (~5 s) and shows results in a `AlertDialog`.
+3. Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) → calls `DriveTransportFactory.create()`, attempts a lightweight Drive API call (`files().list()` with `pageSize=1`), shows "Connected" or error Toast.
+4. Update `SyncSettingsHelper` (play) to wire the test-connection button.
+5. Update `SettingsFragment` to wire the local-scan button.
+6. Add string resources (en + it).
+
+**Key constraints:**
+- All new source code: Java.
+- No Google dependency outside `playImplementation`.
+- Build: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew assembleFdroidDebug`
+- Tests: `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest`
+
+**Conventions established this session:**
+- `SyncSettingsHelper.refreshSignInState(fragment)` is the single authoritative method for updating Drive sign-in preference visibility; always call it instead of toggling individual prefs manually.
+- Sign-in `GoogleSignInOptions` always requests `DriveScopes.DRIVE_APPDATA` scope so the user grants Drive access at sign-in time.
+- The `ActivityResultLauncher<Intent>` lives in `SettingsFragment` (registered in `onCreate`); `SyncSettingsHelper` receives it as a parameter so that the play flavor can launch activities without the fragment needing any Google imports.
