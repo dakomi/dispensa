@@ -697,3 +697,117 @@ To trigger the release:
 - `SyncSettingsHelper.refreshSignInState(fragment)` is the single authoritative method for updating Drive sign-in preference visibility; always call it instead of toggling individual prefs manually.
 - Sign-in `GoogleSignInOptions` always requests `DriveScopes.DRIVE_APPDATA` scope so the user grants Drive access at sign-in time.
 - The `ActivityResultLauncher<Intent>` lives in `SettingsFragment` (registered in `onCreate`); `SyncSettingsHelper` receives it as a parameter so that the play flavor can launch activities without the fragment needing any Google imports.
+
+---
+
+## Session 10 — Peer Discovery & Pairing UI
+
+**Date:** 2026-04-27  
+**Goal:** Surface local-network peer discovery status and add an explicit Drive connection-test button.
+
+### What was done
+
+- Added `getDiscoveredPeers()` public method to `LocalNetworkSyncTransport` that returns a snapshot `ArrayList` of currently-resolved peers. This is needed because `stop()` clears the internal `discoveredPeers` list, so callers must snapshot before stopping.
+- Added two new preferences to `app/src/main/res/xml/preferences.xml` inside `pref_cat_sync`:
+  - `sync_local_peers_status` — non-selectable Preference that shows the last-scan result ("No peers found yet" or "N device(s) found").
+  - `sync_local_scan_peers` — tappable Preference that triggers a 5-second NSD scan on a background thread, then displays an `AlertDialog` listing discovered peer names and IP:port combinations.
+- Added `sync_drive_test_connection` to `app/src/play/res/xml/preferences_sync_drive.xml` — a tappable preference that tests Drive connectivity, visible only when signed in.
+- Updated `SyncSettingsHelper` (play flavor):
+  - Added `KEY_TEST_CONNECTION = "sync_drive_test_connection"` constant.
+  - Added new `testDriveConnection(context)` private helper: calls `DriveTransportFactory.create(context, null)` to obtain the transport (null-safe); runs `transport.pull()` on a single-thread executor; posts a success/failure Toast back on the main thread via `Handler(Looper.getMainLooper())`.
+  - Wires the test-connection preference click inside `setup()` and moves the pref into `pref_cat_sync`.
+  - Updated `refreshSignInState()` to also toggle the `KEY_TEST_CONNECTION` preference visibility (visible only when signed in).
+- Updated `SettingsFragment` (main source set):
+  - Added constants `KEY_SYNC_LOCAL_PEERS_STATUS`, `KEY_SYNC_LOCAL_SCAN_PEERS`, and `PEER_SCAN_DURATION_MS = 5000`.
+  - Added field `syncLocalPeersStatusPreference`.
+  - Added new imports: `NsdServiceInfo`, `Handler`, `Looper`, `AlertDialog`, `IOException`, `List`, `ArrayList`, `Executors`, `AppDatabase`, `LocalNetworkSyncTransport`, `SyncManager`.
+  - Added `updateLocalPeersStatus(int count)` helper that updates the summary of `sync_local_peers_status`.
+  - Added `runLocalPeerScan()`: starts a `LocalNetworkSyncTransport`, sleeps 5 s, snapshots `getDiscoveredPeers()`, calls `stop()`, then posts results to the main thread.
+  - Added `showPeerScanDialog(List<NsdServiceInfo>)`: builds an `AlertDialog` listing `serviceName — host:port` for each peer, or "No Dispensa devices found" if empty.
+- Added string resources (en + it): `pref_sync_local_peers_status_title/none/count`, `pref_sync_local_scan_peers_title/summary`, `pref_sync_drive_test_connection_title/summary`, `notify_sync_drive_test_ok/fail/not_signed_in`, `sync_scan_peers_dialog_title`, `sync_scan_peers_none`.
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransport.java` — added `getDiscoveredPeers()` public getter
+- `app/src/main/res/xml/preferences.xml` — added `sync_local_peers_status` and `sync_local_scan_peers`
+- `app/src/play/res/xml/preferences_sync_drive.xml` — added `sync_drive_test_connection`
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — added test-connection key, wiring, helper, refreshSignInState update
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — added scan/status wiring, `runLocalPeerScan()`, `showPeerScanDialog()`
+- `app/src/main/res/values/strings.xml` — 11 new string resources (en)
+- `app/src/main/res/values-it/strings.xml` — 11 new string resources (it)
+- `PLAN.md` — Session 10 tasks marked complete
+
+### Test results
+
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=.../temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest testPlayDebugUnitTest` — **BUILD SUCCESSFUL** — all 74 unit tests pass (unchanged from Session 9)
+
+### Drive Sharing Exploration — Multi-Account Sync Pathways
+
+The user asked to explore how to expand Google Drive sync to work across multiple users with **different Google accounts** via shared file/folder permissions. Here is a structured analysis:
+
+#### Current Limitation
+
+The current implementation uses `DriveScopes.DRIVE_APPDATA` which stores data in the **hidden `appDataFolder`** — a private, per-account space that cannot be shared with other Google accounts. This means Drive sync only works between devices signed into the **same** Google account.
+
+#### Pathway 1 — Shared Drive Folder + `DRIVE_FILE` Scope (Recommended)
+
+Each user with their own Google account can access a shared household folder:
+
+1. **Host setup:** One user ("host") creates a folder named e.g. `Dispensa Household` in their Drive (using `DriveScopes.DRIVE_FILE`), then calls the Drive Permissions API to add other users' email addresses as `writer` members.
+2. **Guest join:** Each guest user stores the shared folder ID (obtained via QR code or manual entry), verified by `drive.files().get(folderId)`.
+3. **Sync protocol:** Each device writes its own file `dispensa_{deviceId}.json` to the shared folder (instead of one monolithic file). On sync: upload own file, list and download all `dispensa_*.json` files from the folder, import each blob.
+4. **Scope:** `DRIVE_FILE` — grants access only to files the app created or files the app explicitly opened. The guest must open/access the shared folder at join time (e.g. by calling `files().get(folderId)` while the user is signed in) to add it to the list of files accessible to the app.
+
+**Key advantages:** `DRIVE_FILE` is the most privacy-respecting scope; users retain full Drive permissions control; works with free Google accounts; no Google Workspace required.
+
+**Key trade-offs:** Requires a UX flow (QR code or link) to share the folder ID out-of-band; only the host can add new members; the host's Drive quota is used for all files.
+
+#### Pathway 2 — Shared Google Drive (Team Drive)
+
+Google Workspace's Shared Drives let multiple accounts be full members. Requires `DriveScopes.DRIVE` (full Drive access). This is impractical for personal use: overkill for a pantry app, requires Workspace subscription, and the broad `DRIVE` scope would be rejected by the Play Store policy review.
+
+#### Pathway 3 — Single Shared File via `DRIVE_FILE` + Google Drive Picker
+
+The host creates the sync file; shares it as "Anyone with the link can edit". The guest uses the Google Drive Picker UI library (`com.google.android.gms:play-services-drive` or the newer `https://developers.google.com/drive/picker`) to "open" the shared file — after which the file is accessible under `DRIVE_FILE` scope. Less structured than Pathway 1 (one file means merge conflicts are harder to avoid) but simpler to implement initially.
+
+#### Recommended Implementation Plan (Pathway 1)
+
+This would be Session 12 work; it builds on Session 11 (`SyncPermissionManager`):
+
+1. **Scope change:** Add `DriveScopes.DRIVE_FILE` to `GoogleSignInOptions` alongside (or instead of) `DRIVE_APPDATA`. Keep `DRIVE_APPDATA` as a fallback for single-user mode.
+2. **New `HouseholdManager` class** (`play/` flavor):
+   - `createHousehold(context, emails)` → creates `Dispensa Household` folder; calls `drive.permissions().create(folderId, permission).execute()` for each email; stores `folderId` in `SharedPreferences`.
+   - `joinHousehold(context, folderId)` → verifies `drive.files().get(folderId)` succeeds; stores `folderId`.
+   - `getFolderId()` → returns stored folder ID; `null` = solo mode.
+3. **Updated `GoogleDriveSyncTransport`:**
+   - If `HouseholdManager.getFolderId()` is non-null: write own file `dispensa_{deviceId}.json` to the folder; read all `dispensa_*.json` files from the folder and return a merged list of blobs.
+   - If folder ID is null: fall back to current `appDataFolder` behaviour (solo mode).
+4. **New preferences** (play):
+   - `sync_drive_create_household` — opens a dialog to enter email addresses; calls `HouseholdManager.createHousehold()`; shows the join link/ID for sharing.
+   - `sync_drive_join_household` — opens a dialog to enter or scan the folder ID.
+   - `sync_drive_household_status` — read-only, shows "Solo mode" or "Household: N members".
+5. **QR code / deep link:**
+   - The join invitation URI: `dispensa://household?folderId=<id>` — handled by a new `<intent-filter>` in `AndroidManifest.xml`.
+   - The Settings UI shows the deep-link as a scannable QR code (using ZXing or a simple Bitmap renderer).
+
+This plan would be implemented as Session 12.
+
+### Handoff to Session 11 — Sharing Permission Management
+
+**Next session goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
+
+**Specific tasks (from PLAN.md):**
+1. Create `SyncPermissionManager` (main) maintaining a persisted set of trusted device UUIDs.
+2. Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to check device ID from the blob header and reject unknown devices.
+3. Add `ManageSyncDevicesFragment` listing trusted/pending devices.
+4. Add `sync_manage_devices` preference entry in `preferences.xml`.
+5. Add Drive sharing info preference explaining the single-account model.
+6. Add string resources (en + it).
+7. Write unit tests for `SyncPermissionManager`.
+
+**Conventions established this session:**
+- `LocalNetworkSyncTransport.getDiscoveredPeers()` must be called **before** `stop()` — `stop()` clears the peer list.
+- `SyncSettingsHelper.testDriveConnection(context)` uses `DriveTransportFactory.create(context, null)` — passing `null` for `syncManager` is safe because the factory never uses that parameter.
+- `sync_drive_test_connection` preference visibility is toggled by `refreshSignInState()` — always visible when signed in, hidden when not.
+- Background work in `SettingsFragment` always uses `Executors.newSingleThreadExecutor()` + `Handler(Looper.getMainLooper()).post()` for UI updates (same pattern established in Session 6 for `clearOpenFoodFactCache` and `cleanOrphanImages`).

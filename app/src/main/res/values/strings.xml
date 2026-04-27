@@ -232,6 +232,18 @@
     <string name="pref_sync_drive_sign_in_summary">Sign in to enable Google Drive sync</string>
     <string name="notify_sync_signed_in">Signed in as %1$s</string>
     <string name="notify_sync_sign_in_failed">Google Sign-In failed. Please try again.</string>
+    <string name="pref_sync_local_peers_status_title">Nearby devices</string>
+    <string name="pref_sync_local_peers_status_none">No peers found yet</string>
+    <string name="pref_sync_local_peers_status_count">%1$d device(s) found</string>
+    <string name="pref_sync_local_scan_peers_title">Scan for nearby devices</string>
+    <string name="pref_sync_local_scan_peers_summary">Search for other Dispensa instances on this Wi-Fi network</string>
+    <string name="pref_sync_drive_test_connection_title">Test Drive connection</string>
+    <string name="pref_sync_drive_test_connection_summary">Verify that Google Drive sync is working</string>
+    <string name="notify_sync_drive_test_ok">Google Drive connection successful ✓</string>
+    <string name="notify_sync_drive_test_fail">Drive connection failed: %1$s</string>
+    <string name="notify_sync_drive_test_not_signed_in">Sign in to Google first</string>
+    <string name="sync_scan_peers_dialog_title">Nearby Dispensa devices</string>
+    <string name="sync_scan_peers_none">No Dispensa devices found on this network.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">No product found for this barcode</string>

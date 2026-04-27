@@ -3,6 +3,8 @@ package eu.frigo.dispensa.ui;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -22,8 +24,12 @@ import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.tasks.Task;
 import com.google.api.services.drive.DriveScopes;
 
+import java.util.concurrent.Executors;
+
 import eu.frigo.dispensa.R;
 import eu.frigo.dispensa.sync.DriveTransportFactory;
+import eu.frigo.dispensa.sync.SyncCallback;
+import eu.frigo.dispensa.sync.SyncTransport;
 
 /**
  * Play-flavor helper that injects Google Drive sync preferences into {@link SettingsFragment}.
@@ -49,6 +55,7 @@ public class SyncSettingsHelper {
     static final String KEY_SIGN_IN = "sync_drive_sign_in";
     static final String KEY_ACCOUNT = "sync_drive_account";
     static final String KEY_SIGN_OUT = "sync_drive_sign_out";
+    static final String KEY_TEST_CONNECTION = "sync_drive_test_connection";
 
     private SyncSettingsHelper() {}
 
@@ -96,6 +103,16 @@ public class SyncSettingsHelper {
             syncCategory.addPreference(signOutPref);
             signOutPref.setOnPreferenceClickListener(pref -> {
                 signOut(context, driveEnabled, accountPref, signInPref, signOutPref);
+                return true;
+            });
+        }
+
+        Preference testConnectionPref = rootScreen.findPreference(KEY_TEST_CONNECTION);
+        if (testConnectionPref != null) {
+            rootScreen.removePreference(testConnectionPref);
+            syncCategory.addPreference(testConnectionPref);
+            testConnectionPref.setOnPreferenceClickListener(pref -> {
+                testDriveConnection(context);
                 return true;
             });
         }
@@ -220,15 +237,54 @@ public class SyncSettingsHelper {
         Preference signInPref  = fragment.findPreference(KEY_SIGN_IN);
         Preference accountPref = fragment.findPreference(KEY_ACCOUNT);
         Preference signOutPref = fragment.findPreference(KEY_SIGN_OUT);
+        Preference testConnPref = fragment.findPreference(KEY_TEST_CONNECTION);
 
         if (signInPref  != null) signInPref.setVisible(!signedIn);
         if (signOutPref != null) signOutPref.setVisible(signedIn);
+        if (testConnPref != null) testConnPref.setVisible(signedIn);
         if (accountPref != null) {
             accountPref.setVisible(signedIn);
             if (signedIn) {
                 accountPref.setSummary(account.getEmail());
             }
         }
+    }
+
+    /**
+     * Runs a lightweight Drive connectivity test on a background thread and reports
+     * the result via a {@link Toast} on the main thread.
+     *
+     * <p>Uses {@link DriveTransportFactory#create} to obtain a transport (which verifies
+     * sign-in state).  If the user is not signed in, a Toast is shown immediately.
+     * Otherwise the {@link SyncTransport#pull} method is called — a successful response
+     * (even a {@code null} result meaning no file yet) confirms that Drive is reachable.
+     */
+    private static void testDriveConnection(Context context) {
+        SyncTransport transport = DriveTransportFactory.create(context, null);
+        if (transport == null) {
+            Toast.makeText(context,
+                    context.getString(R.string.notify_sync_drive_test_not_signed_in),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        Executors.newSingleThreadExecutor().execute(() ->
+                transport.pull(new SyncCallback() {
+                    @Override
+                    public void onSuccess(byte[] data) {
+                        mainHandler.post(() -> Toast.makeText(context,
+                                context.getString(R.string.notify_sync_drive_test_ok),
+                                Toast.LENGTH_SHORT).show());
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        String msg = context.getString(
+                                R.string.notify_sync_drive_test_fail, e.getMessage());
+                        mainHandler.post(() -> Toast.makeText(context, msg,
+                                Toast.LENGTH_LONG).show());
+                    }
+                }));
     }
 
     private static void launchSignIn(Context context, ActivityResultLauncher<Intent> launcher) {

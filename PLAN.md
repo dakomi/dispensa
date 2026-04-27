@@ -254,12 +254,12 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Surface local-network peer discovery status and add an explicit Drive connection-test button.
 
-- [ ] Add `sync_local_peers_status` read-only preference to `preferences.xml` showing discovered peer count
-- [ ] Add `sync_local_scan_peers` tappable preference button that runs a short NSD scan and displays results in a dialog
-- [ ] Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) that verifies Drive connectivity and reports success/failure
-- [ ] Update `SyncSettingsHelper` (play) to wire the Drive test-connection button
-- [ ] Update `SettingsFragment` to wire the local-scan button; add a `PeerScanDialogFragment` that shows discovered peer names/IPs
-- [ ] Add string resources (en + it)
+- [x] Add `sync_local_peers_status` read-only preference to `preferences.xml` showing discovered peer count
+- [x] Add `sync_local_scan_peers` tappable preference button that runs a short NSD scan and displays results in a dialog
+- [x] Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) that verifies Drive connectivity and reports success/failure
+- [x] Update `SyncSettingsHelper` (play) to wire the Drive test-connection button
+- [x] Update `SettingsFragment` to wire the local-scan button; show discovered peer names/IPs in an `AlertDialog`
+- [x] Add string resources (en + it)
 
 **Tests:** Compile verification on both flavors.
 

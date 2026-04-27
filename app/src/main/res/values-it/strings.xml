@@ -232,6 +232,18 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_sync_drive_sign_in_summary">Accedi per abilitare la sincronizzazione con Google Drive</string>
     <string name="notify_sync_signed_in">Connesso come %1$s</string>
     <string name="notify_sync_sign_in_failed">Accesso a Google non riuscito. Riprova.</string>
+    <string name="pref_sync_local_peers_status_title">Dispositivi vicini</string>
+    <string name="pref_sync_local_peers_status_none">Nessun dispositivo trovato</string>
+    <string name="pref_sync_local_peers_status_count">%1$d dispositivo/i trovato/i</string>
+    <string name="pref_sync_local_scan_peers_title">Cerca dispositivi vicini</string>
+    <string name="pref_sync_local_scan_peers_summary">Cerca altre istanze di Dispensa sulla stessa rete Wi-Fi</string>
+    <string name="pref_sync_drive_test_connection_title">Testa connessione Drive</string>
+    <string name="pref_sync_drive_test_connection_summary">Verifica che la sincronizzazione con Google Drive funzioni</string>
+    <string name="notify_sync_drive_test_ok">Connessione a Google Drive riuscita ✓</string>
+    <string name="notify_sync_drive_test_fail">Connessione Drive non riuscita: %1$s</string>
+    <string name="notify_sync_drive_test_not_signed_in">Accedi prima a Google</string>
+    <string name="sync_scan_peers_dialog_title">Dispositivi Dispensa vicini</string>
+    <string name="sync_scan_peers_none">Nessun dispositivo Dispensa trovato su questa rete.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">Nessun prodotto trovato con questo codice a barre</string>

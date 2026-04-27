@@ -379,6 +379,18 @@ public class LocalNetworkSyncTransport implements SyncTransport {
         });
     }
 
+    // ── Public accessors ─────────────────────────────────────────────────────
+
+    /**
+     * Returns a snapshot of currently discovered peers.  Safe to call from any thread.
+     *
+     * <p>Note: the returned list is a copy — changes to it do not affect the internal state.
+     * Call this <em>before</em> {@link #stop()} since {@code stop()} clears the peer list.
+     */
+    public java.util.List<NsdServiceInfo> getDiscoveredPeers() {
+        return new java.util.ArrayList<>(discoveredPeers);
+    }
+
     // ── Private factory helpers ───────────────────────────────────────────────
 
     private static WifiManager.MulticastLock buildMulticastLock(Context context) {
