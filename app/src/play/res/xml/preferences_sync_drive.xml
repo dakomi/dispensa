@@ -28,4 +28,37 @@
         app:summary="@string/pref_sync_drive_sign_out_summary"
         app:iconSpaceReserved="false"/>
 
+    <!-- Visible when signed in; tests Drive connectivity -->
+    <Preference
+        app:key="sync_drive_test_connection"
+        app:title="@string/pref_sync_drive_test_connection_title"
+        app:summary="@string/pref_sync_drive_test_connection_summary"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Household sync — visible when signed in -->
+    <Preference
+        app:key="sync_drive_household_status"
+        app:title="@string/pref_sync_drive_household_status_title"
+        app:selectable="false"
+        app:iconSpaceReserved="false"/>
+
+    <Preference
+        app:key="sync_drive_create_household"
+        app:title="@string/pref_sync_drive_create_household_title"
+        app:summary="@string/pref_sync_drive_create_household_summary"
+        app:iconSpaceReserved="false"/>
+
+    <Preference
+        app:key="sync_drive_join_household"
+        app:title="@string/pref_sync_drive_join_household_title"
+        app:summary="@string/pref_sync_drive_join_household_summary"
+        app:iconSpaceReserved="false"/>
+
+    <!-- Visible only when a household is active -->
+    <Preference
+        app:key="sync_drive_leave_household"
+        app:title="@string/pref_sync_drive_leave_household_title"
+        app:summary="@string/pref_sync_drive_leave_household_summary"
+        app:iconSpaceReserved="false"/>
+
 </PreferenceScreen>

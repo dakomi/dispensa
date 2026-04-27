@@ -3,12 +3,16 @@ package eu.frigo.dispensa.ui;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.nsd.NsdServiceInfo;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.format.DateFormat;
 import android.util.Log;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 import androidx.preference.EditTextPreference;
@@ -19,14 +23,22 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
 
+import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.Executors;
 
 import eu.frigo.dispensa.R;
+import eu.frigo.dispensa.data.AppDatabase;
 import eu.frigo.dispensa.sync.DriveTransportFactory;
+import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
+import eu.frigo.dispensa.sync.SyncManager;
+import eu.frigo.dispensa.ui.ManageSyncDevicesFragment;
 import eu.frigo.dispensa.util.LocaleHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorkerScheduler;
 import eu.frigo.dispensa.work.SyncWorker;
@@ -47,6 +59,17 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     public static final String KEY_SYNC_LOCAL_NETWORK_ENABLED = SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED;
     public static final String KEY_SYNC_LAST_TIMESTAMP = "sync_last_timestamp";
     public static final String KEY_SYNC_TRIGGER_MANUAL = "sync_trigger_manual";
+    public static final String KEY_SYNC_LOCAL_PEERS_STATUS = "sync_local_peers_status";
+    public static final String KEY_SYNC_LOCAL_SCAN_PEERS = "sync_local_scan_peers";
+
+    /**
+     * Fragment argument key that carries a household folder ID from a deep-link Intent.
+     * If present, the join-household dialog is automatically shown after setup.
+     */
+    public static final String ARG_HOUSEHOLD_FOLDER_ID = "household_folder_id";
+
+    /** Duration (ms) to scan for NSD peers before stopping. */
+    private static final long PEER_SCAN_DURATION_MS = 5_000L;
 
     /** SharedPreferences key where the last-sync epoch-millis is stored. */
     private static final String PREFS_KEY_LAST_SYNC_EPOCH = "sync_last_epoch_ms";
@@ -54,6 +77,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     private static final String TAG = "SettingsFragment";
     private Preference notificationTimePreference;
     private Preference syncLastTimestampPreference;
+    private Preference syncLocalPeersStatusPreference;
     private ListPreference languagePreference;
     private ActivityResultLauncher<Intent> googleSignInLauncher;
 
@@ -153,9 +177,29 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             });
         }
 
+        syncLocalPeersStatusPreference = findPreference(KEY_SYNC_LOCAL_PEERS_STATUS);
+        updateLocalPeersStatus(0);
+
+        Preference scanPeersPref = findPreference(KEY_SYNC_LOCAL_SCAN_PEERS);
+        if (scanPeersPref != null) {
+            scanPeersPref.setOnPreferenceClickListener(preference -> {
+                runLocalPeerScan();
+                return true;
+            });
+        }
+
         // Inject play-flavor Drive preferences (no-op in fdroid flavor)
         SyncSettingsHelper.setup(this);
         SyncSettingsHelper.setSignInLauncher(this, googleSignInLauncher);
+
+        // Handle household deep-link if the activity received one
+        Bundle args = getArguments();
+        if (args != null) {
+            String householdFolderId = args.getString(ARG_HOUSEHOLD_FOLDER_ID);
+            if (householdFolderId != null) {
+                SyncSettingsHelper.handleHouseholdDeepLink(this, householdFolderId);
+            }
+        }
     }
 
     private void clearOpenFoodFactCache() {
@@ -225,6 +269,77 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                     .format(new Date(epochMs));
             syncLastTimestampPreference.setSummary(formatted);
         }
+    }
+
+    private void updateLocalPeersStatus(int count) {
+        if (syncLocalPeersStatusPreference == null) return;
+        if (count == 0) {
+            syncLocalPeersStatusPreference.setSummary(
+                    getString(R.string.pref_sync_local_peers_status_none));
+        } else {
+            syncLocalPeersStatusPreference.setSummary(
+                    getString(R.string.pref_sync_local_peers_status_count, count));
+        }
+    }
+
+    /**
+     * Runs a short NSD scan (~{@value #PEER_SCAN_DURATION_MS} ms) on a background thread,
+     * then shows the discovered peers in an {@link AlertDialog}.
+     */
+    private void runLocalPeerScan() {
+        Context context = requireContext();
+        java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            SyncManager syncManager = new SyncManager(AppDatabase.getDatabase(context), context);
+            LocalNetworkSyncTransport transport =
+                    new LocalNetworkSyncTransport(context, syncManager);
+            List<NsdServiceInfo> peers = new ArrayList<>();
+            boolean interrupted = false;
+            try {
+                transport.start();
+                Thread.sleep(PEER_SCAN_DURATION_MS);
+                peers = transport.getDiscoveredPeers(); // snapshot before stop clears the list
+            } catch (InterruptedException e) {
+                Log.w(TAG, "Peer scan interrupted", e);
+                interrupted = true;
+                peers = transport.getDiscoveredPeers(); // capture any partial results
+            } catch (IOException e) {
+                Log.w(TAG, "Peer scan error", e);
+            } finally {
+                transport.stop();
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            final List<NsdServiceInfo> finalPeers = peers;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                updateLocalPeersStatus(finalPeers.size());
+                showPeerScanDialog(finalPeers);
+            });
+        });
+        executor.shutdown();
+    }
+
+    private void showPeerScanDialog(List<NsdServiceInfo> peers) {
+        if (getContext() == null) return;
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle(R.string.sync_scan_peers_dialog_title);
+        if (peers.isEmpty()) {
+            builder.setMessage(R.string.sync_scan_peers_none);
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (NsdServiceInfo peer : peers) {
+                if (sb.length() > 0) sb.append('\n');
+                String host = peer.getHost() != null
+                        ? peer.getHost().getHostAddress() : "?";
+                sb.append(peer.getServiceName())
+                        .append(" — ").append(host)
+                        .append(':').append(peer.getPort());
+            }
+            builder.setMessage(sb.toString());
+        }
+        builder.setPositiveButton(R.string.ok, null);
+        builder.show();
     }
 
     @Override
@@ -327,6 +442,13 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 .addToBackStack(null)
                 .commit();
             return false;
+        }
+        if (preference.getKey() != null && preference.getKey().equals("sync_manage_devices")) {
+            getParentFragmentManager().beginTransaction()
+                .replace(android.R.id.content, new ManageSyncDevicesFragment())
+                .addToBackStack(null)
+                .commit();
+            return true;
         }
         return false;
     }

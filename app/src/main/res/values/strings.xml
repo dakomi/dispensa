@@ -232,6 +232,60 @@
     <string name="pref_sync_drive_sign_in_summary">Sign in to enable Google Drive sync</string>
     <string name="notify_sync_signed_in">Signed in as %1$s</string>
     <string name="notify_sync_sign_in_failed">Google Sign-In failed. Please try again.</string>
+    <string name="pref_sync_local_peers_status_title">Nearby devices</string>
+    <string name="pref_sync_local_peers_status_none">No peers found yet</string>
+    <string name="pref_sync_local_peers_status_count">%1$d device(s) found</string>
+    <string name="pref_sync_local_scan_peers_title">Scan for nearby devices</string>
+    <string name="pref_sync_local_scan_peers_summary">Search for other Dispensa instances on this Wi-Fi network</string>
+    <string name="pref_sync_drive_test_connection_title">Test Drive connection</string>
+    <string name="pref_sync_drive_test_connection_summary">Verify that Google Drive sync is working</string>
+    <string name="notify_sync_drive_test_ok">Google Drive connection successful ✓</string>
+    <string name="notify_sync_drive_test_fail">Drive connection failed: %1$s</string>
+    <string name="notify_sync_drive_test_not_signed_in">Sign in to Google first</string>
+    <string name="sync_scan_peers_dialog_title">Nearby Dispensa devices</string>
+    <string name="sync_scan_peers_none">No Dispensa devices found on this network.</string>
+
+    <!-- Device trust management (Session 11) -->
+    <string name="pref_sync_manage_devices_title">Manage trusted devices</string>
+    <string name="pref_sync_manage_devices_summary">Approve or revoke devices allowed to sync over local network</string>
+    <string name="title_manage_sync_devices">Trusted sync devices</string>
+    <string name="sync_devices_section_trusted">Trusted devices</string>
+    <string name="sync_devices_section_pending">Pending devices</string>
+    <string name="sync_devices_trusted_empty">No trusted devices yet. Devices that request sync will appear in the Pending section below.</string>
+    <string name="sync_devices_pending_empty">No pending connection requests.</string>
+    <string name="sync_devices_device_id_label">Device %1$s</string>
+    <string name="sync_devices_action_approve">Approve</string>
+    <string name="sync_devices_action_revoke">Revoke</string>
+    <string name="sync_devices_action_dismiss">Dismiss</string>
+
+    <!-- Household sync (play flavor) -->
+    <string name="pref_sync_drive_household_status_title">Household status</string>
+    <string name="pref_sync_drive_household_status_solo">Solo mode — only this device syncs</string>
+    <string name="pref_sync_drive_household_status_active">Household active (folder: %1$s)</string>
+    <string name="pref_sync_drive_create_household_title">Create household</string>
+    <string name="pref_sync_drive_create_household_summary">Share your pantry with other Google accounts</string>
+    <string name="pref_sync_drive_join_household_title">Join household</string>
+    <string name="pref_sync_drive_join_household_summary">Join a shared pantry using an invite link or folder ID</string>
+    <string name="pref_sync_drive_leave_household_title">Leave household</string>
+    <string name="pref_sync_drive_leave_household_summary">Stop syncing with shared household; revert to solo mode</string>
+    <string name="dialog_create_household_title">Create household</string>
+    <string name="dialog_create_household_message">Enter the Google account email(s) of household members to invite (comma or space separated). Leave blank to create first and share the link manually.</string>
+    <string name="dialog_create_household_ok">Create</string>
+    <string name="dialog_join_household_title">Join household</string>
+    <string name="dialog_join_household_message">Paste the invite link (dispensa://household?…) or the folder ID shared by the household host.</string>
+    <string name="dialog_join_household_ok">Join</string>
+    <string name="dialog_leave_household_title">Leave household?</string>
+    <string name="dialog_leave_household_message">You will stop syncing with the shared household folder. Your existing pantry data will not be deleted.</string>
+    <string name="dialog_leave_household_ok">Leave</string>
+    <string name="dialog_household_link_title">Share this link</string>
+    <string name="dialog_household_link_message">Copy and share this invite link with household members. They can paste it into Dispensa to join.</string>
+    <string name="hint_household_emails">e.g. alice@gmail.com, bob@gmail.com</string>
+    <string name="hint_household_folder_id">Paste invite link or folder ID</string>
+    <string name="notify_household_joined">Joined household ✓</string>
+    <string name="notify_household_left">Left household — reverted to solo mode</string>
+    <string name="err_household_create">Failed to create household: %1$s</string>
+    <string name="err_household_join">Failed to join household: %1$s</string>
+    <string name="err_household_join_not_found">Household not found. Check the folder ID and make sure you were invited.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">No product found for this barcode</string>

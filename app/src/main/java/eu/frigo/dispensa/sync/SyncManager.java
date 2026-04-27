@@ -159,7 +159,7 @@ public class SyncManager {
             }
         }
 
-        SyncBlob blob = new SyncBlob(changes);
+        SyncBlob blob = new SyncBlob(localDeviceId, changes);
         return gson.toJson(blob).getBytes(StandardCharsets.UTF_8);
     }
 
@@ -250,6 +250,22 @@ public class SyncManager {
             prefs.edit().putString(PREFS_KEY_DEVICE_ID, deviceId).apply();
         }
         return deviceId;
+    }
+
+    /**
+     * Parses the {@link SyncBlob#senderDeviceId} field from a raw blob byte array.
+     * Returns {@code null} if the blob is malformed or was produced by an older client
+     * that does not include the field.
+     */
+    static String extractSenderDeviceId(byte[] blobBytes) {
+        if (blobBytes == null) return null;
+        try {
+            String json = new String(blobBytes, StandardCharsets.UTF_8);
+            SyncBlob blob = new Gson().fromJson(json, SyncBlob.class);
+            return blob != null ? blob.senderDeviceId : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

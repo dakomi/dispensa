@@ -33,4 +33,8 @@ public class SyncSettingsHelper {
     /** No-op — Drive sync is not available in the F-Droid build. */
     public static void onDriveEnabledChanged(PreferenceFragmentCompat fragment,
             boolean enabled, ActivityResultLauncher<Intent> launcher) {}
+
+    /** No-op — household deep-links are not supported in the F-Droid build. */
+    public static void handleHouseholdDeepLink(PreferenceFragmentCompat fragment,
+            String folderId) {}
 }

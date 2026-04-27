@@ -126,6 +126,24 @@
             app:summary="@string/pref_sync_trigger_manual_summary"
             app:iconSpaceReserved="false"/>
 
+        <Preference
+            app:key="sync_local_peers_status"
+            app:title="@string/pref_sync_local_peers_status_title"
+            app:selectable="false"
+            app:iconSpaceReserved="false"/>
+
+        <Preference
+            app:key="sync_local_scan_peers"
+            app:title="@string/pref_sync_local_scan_peers_title"
+            app:summary="@string/pref_sync_local_scan_peers_summary"
+            app:iconSpaceReserved="false"/>
+
+        <Preference
+            app:key="sync_manage_devices"
+            app:title="@string/pref_sync_manage_devices_title"
+            app:summary="@string/pref_sync_manage_devices_summary"
+            app:iconSpaceReserved="false"/>
+
     </PreferenceCategory>
 
 </PreferenceScreen>

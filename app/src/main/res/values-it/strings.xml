@@ -232,6 +232,60 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_sync_drive_sign_in_summary">Accedi per abilitare la sincronizzazione con Google Drive</string>
     <string name="notify_sync_signed_in">Connesso come %1$s</string>
     <string name="notify_sync_sign_in_failed">Accesso a Google non riuscito. Riprova.</string>
+    <string name="pref_sync_local_peers_status_title">Dispositivi vicini</string>
+    <string name="pref_sync_local_peers_status_none">Nessun dispositivo trovato</string>
+    <string name="pref_sync_local_peers_status_count">%1$d dispositivo/i trovato/i</string>
+    <string name="pref_sync_local_scan_peers_title">Cerca dispositivi vicini</string>
+    <string name="pref_sync_local_scan_peers_summary">Cerca altre istanze di Dispensa sulla stessa rete Wi-Fi</string>
+    <string name="pref_sync_drive_test_connection_title">Testa connessione Drive</string>
+    <string name="pref_sync_drive_test_connection_summary">Verifica che la sincronizzazione con Google Drive funzioni</string>
+    <string name="notify_sync_drive_test_ok">Connessione a Google Drive riuscita ✓</string>
+    <string name="notify_sync_drive_test_fail">Connessione Drive non riuscita: %1$s</string>
+    <string name="notify_sync_drive_test_not_signed_in">Accedi prima a Google</string>
+    <string name="sync_scan_peers_dialog_title">Dispositivi Dispensa vicini</string>
+    <string name="sync_scan_peers_none">Nessun dispositivo Dispensa trovato su questa rete.</string>
+
+    <!-- Device trust management (Session 11) -->
+    <string name="pref_sync_manage_devices_title">Gestisci dispositivi attendibili</string>
+    <string name="pref_sync_manage_devices_summary">Approva o revoca i dispositivi autorizzati alla sincronizzazione sulla rete locale</string>
+    <string name="title_manage_sync_devices">Dispositivi sync attendibili</string>
+    <string name="sync_devices_section_trusted">Dispositivi attendibili</string>
+    <string name="sync_devices_section_pending">Dispositivi in attesa</string>
+    <string name="sync_devices_trusted_empty">Nessun dispositivo attendibile. I dispositivi che richiedono la sincronizzazione appariranno nella sezione In attesa.</string>
+    <string name="sync_devices_pending_empty">Nessuna richiesta di connessione in attesa.</string>
+    <string name="sync_devices_device_id_label">Dispositivo %1$s</string>
+    <string name="sync_devices_action_approve">Approva</string>
+    <string name="sync_devices_action_revoke">Revoca</string>
+    <string name="sync_devices_action_dismiss">Ignora</string>
+
+    <!-- Household sync (play flavor) -->
+    <string name="pref_sync_drive_household_status_title">Stato nucleo familiare</string>
+    <string name="pref_sync_drive_household_status_solo">Modalità singola — solo questo dispositivo sincronizza</string>
+    <string name="pref_sync_drive_household_status_active">Nucleo familiare attivo (cartella: %1$s)</string>
+    <string name="pref_sync_drive_create_household_title">Crea nucleo familiare</string>
+    <string name="pref_sync_drive_create_household_summary">Condividi la tua dispensa con altri account Google</string>
+    <string name="pref_sync_drive_join_household_title">Entra nel nucleo familiare</string>
+    <string name="pref_sync_drive_join_household_summary">Unisciti a una dispensa condivisa tramite link d\'invito o ID cartella</string>
+    <string name="pref_sync_drive_leave_household_title">Lascia il nucleo familiare</string>
+    <string name="pref_sync_drive_leave_household_summary">Smetti di sincronizzare con il nucleo familiare condiviso; torna alla modalità singola</string>
+    <string name="dialog_create_household_title">Crea nucleo familiare</string>
+    <string name="dialog_create_household_message">Inserisci gli indirizzi email Google dei membri da invitare (separati da virgola o spazio). Lascia vuoto per creare prima e condividere il link manualmente.</string>
+    <string name="dialog_create_household_ok">Crea</string>
+    <string name="dialog_join_household_title">Entra nel nucleo familiare</string>
+    <string name="dialog_join_household_message">Incolla il link d\'invito (dispensa://household?…) o l\'ID cartella condiviso dall\'amministratore.</string>
+    <string name="dialog_join_household_ok">Entra</string>
+    <string name="dialog_leave_household_title">Lasciare il nucleo familiare?</string>
+    <string name="dialog_leave_household_message">Smetterai di sincronizzare con la cartella condivisa. I dati della dispensa esistenti non verranno eliminati.</string>
+    <string name="dialog_leave_household_ok">Lascia</string>
+    <string name="dialog_household_link_title">Condividi questo link</string>
+    <string name="dialog_household_link_message">Copia e condividi questo link d\'invito con i membri del nucleo familiare. Possono incollarlo in Dispensa per unirsi.</string>
+    <string name="hint_household_emails">es. alice@gmail.com, bob@gmail.com</string>
+    <string name="hint_household_folder_id">Incolla link d\'invito o ID cartella</string>
+    <string name="notify_household_joined">Nucleo familiare raggiunto ✓</string>
+    <string name="notify_household_left">Nucleo familiare lasciato — tornato alla modalità singola</string>
+    <string name="err_household_create">Creazione nucleo familiare non riuscita: %1$s</string>
+    <string name="err_household_join">Accesso al nucleo familiare non riuscito: %1$s</string>
+    <string name="err_household_join_not_found">Nucleo familiare non trovato. Controlla l\'ID cartella e assicurati di essere stato invitato.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">Nessun prodotto trovato con questo codice a barre</string>

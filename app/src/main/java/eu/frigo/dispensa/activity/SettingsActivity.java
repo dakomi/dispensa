@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.MenuItem;
@@ -63,9 +64,17 @@ public class SettingsActivity extends AppCompatActivity {
                         .replace(R.id.settings_container, new eu.frigo.dispensa.ui.ManageLocationsFragment())
                         .commit();
             } else {
+                SettingsFragment fragment = new SettingsFragment();
+                // Check for household join deep-link: dispensa://household?folderId=<id>
+                String householdFolderId = extractHouseholdFolderIdFromIntent(getIntent());
+                if (householdFolderId != null) {
+                    Bundle args = new Bundle();
+                    args.putString(SettingsFragment.ARG_HOUSEHOLD_FOLDER_ID, householdFolderId);
+                    fragment.setArguments(args);
+                }
                 getSupportFragmentManager()
                         .beginTransaction()
-                        .replace(R.id.settings_container, new SettingsFragment())
+                        .replace(R.id.settings_container, fragment)
                         .commit();
             }
         }
@@ -143,5 +152,18 @@ public class SettingsActivity extends AppCompatActivity {
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
         finish();
+    }
+
+    /**
+     * Extracts the household folder ID from a {@code dispensa://household?folderId=<id>}
+     * intent URI, or returns {@code null} if the intent is not a household deep-link.
+     */
+    private static String extractHouseholdFolderIdFromIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return null;
+        Uri data = intent.getData();
+        if (data == null) return null;
+        if (!"dispensa".equals(data.getScheme())) return null;
+        if (!"household".equals(data.getHost())) return null;
+        return data.getQueryParameter("folderId");
     }
 }

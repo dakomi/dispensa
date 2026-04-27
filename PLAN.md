@@ -254,27 +254,51 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 
 **Goal:** Surface local-network peer discovery status and add an explicit Drive connection-test button.
 
-- [ ] Add `sync_local_peers_status` read-only preference to `preferences.xml` showing discovered peer count
-- [ ] Add `sync_local_scan_peers` tappable preference button that runs a short NSD scan and displays results in a dialog
-- [ ] Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) that verifies Drive connectivity and reports success/failure
-- [ ] Update `SyncSettingsHelper` (play) to wire the Drive test-connection button
-- [ ] Update `SettingsFragment` to wire the local-scan button; add a `PeerScanDialogFragment` that shows discovered peer names/IPs
-- [ ] Add string resources (en + it)
+- [x] Add `sync_local_peers_status` read-only preference to `preferences.xml` showing discovered peer count
+- [x] Add `sync_local_scan_peers` tappable preference button that runs a short NSD scan and displays results in a dialog
+- [x] Add `sync_drive_test_connection` tappable preference to `preferences_sync_drive.xml` (play) that verifies Drive connectivity and reports success/failure
+- [x] Update `SyncSettingsHelper` (play) to wire the Drive test-connection button
+- [x] Update `SettingsFragment` to wire the local-scan button; show discovered peer names/IPs in an `AlertDialog`
+- [x] Add string resources (en + it)
 
 **Tests:** Compile verification on both flavors.
 
 ---
 
-### Session 11 — Sharing Permission Management
+### Session 11 — Multi-Account Household Drive Sync ✅
+
+**Goal:** Implement shared-folder Drive sync so multiple Google accounts can sync the same pantry (Pathway 1 from the Session 10 analysis).
+
+- [x] Create `HouseholdManager` (play) — `createHousehold`, `grantAccess`, `verifyAndJoin`, `generateJoinDeepLink`, `buildDrive`, SharedPreferences helpers
+- [x] Add `HouseholdDriveOperations` inner class to `GoogleDriveSyncTransport` — per-device files in shared folder, merged peer download, `DRIVE_FILE` scope
+- [x] Add household-mode constructor to `GoogleDriveSyncTransport(Context, Account, folderId, deviceId)`
+- [x] Update `DriveTransportFactory` — route to household transport when `HouseholdManager.getHouseholdFolderId()` is non-null
+- [x] Update `SyncSettingsHelper` (play) — `DRIVE_FILE` scope in sign-in options; create/join/leave household dialogs; `handleHouseholdDeepLink()`; `refreshSignInState()` shows household status
+- [x] Add no-op `handleHouseholdDeepLink()` to `SyncSettingsHelper` (fdroid)
+- [x] Add 4 household prefs to `preferences_sync_drive.xml` (play): status, create, join, leave
+- [x] Add deep-link intent-filter (`dispensa://household?folderId=…`) to `SettingsActivity` in `AndroidManifest.xml`
+- [x] Update `SettingsActivity` to parse deep-link and pass folderId to `SettingsFragment` as Bundle arg
+- [x] Add `ARG_HOUSEHOLD_FOLDER_ID` to `SettingsFragment`; call `handleHouseholdDeepLink()` when arg is present
+- [x] Add 19 string resources each for en + it
+- [x] Write `HouseholdManagerTest` (9 unit tests)
+- [x] Both flavors compile; all 54 unit tests pass (play + fdroid combined)
+- [x] Sign-out also clears household folder ID
+
+**Tests:** 54 unit tests pass; both flavors BUILD SUCCESSFUL.
+
+---
+
+### Session 12 — Sharing Permission Management ✅
 
 **Goal:** Add a device allowlist for local sync and clarify Drive sharing model in the UI.
 
-- [ ] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
-- [ ] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob header and reject unknown devices (returns empty/error response); add `SyncPermissionManager` dependency
-- [ ] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke actions
-- [ ] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
-- [ ] Add Drive sharing info preference: explain that Drive sync shares data across all devices signed into the same Google account
-- [ ] Add string resources (en + it)
-- [ ] Write unit tests for `SyncPermissionManager`
+- [x] Create `SyncPermissionManager` (main) that maintains a persisted set of trusted device UUIDs in `SharedPreferences`
+- [x] Add `senderDeviceId` field to `SyncBlob`; populate in `SyncManager.exportChanges()`; add `SyncManager.extractSenderDeviceId()` helper
+- [x] Modify `LocalNetworkSyncTransport.handleIncomingConnection()` to read device ID from the blob and reject unknown devices (including those without an ID); add `SyncPermissionManager` dependency
+- [x] Add `ManageSyncDevicesFragment` (main) listing trusted/pending devices with approve/revoke/dismiss actions
+- [x] Add `sync_manage_devices` preference entry in `preferences.xml` that navigates to `ManageSyncDevicesFragment`
+- [x] Drive sharing info preference superseded by Session 11's `KEY_HOUSEHOLD_STATUS`; skipped to avoid redundancy
+- [x] Add string resources (en + it)
+- [x] Write unit tests for `SyncPermissionManager` (11 tests)
 
-**Tests:** JUnit 4 unit tests for `SyncPermissionManager`.
+**Tests:** 103 unit tests pass (fdroid + play combined).

@@ -13,9 +13,12 @@ import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
+import com.google.gson.Gson;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -71,11 +74,27 @@ public class GoogleDriveSyncTransport implements SyncTransport {
     // ── Constructors ──────────────────────────────────────────────────────────
 
     /**
-     * Production constructor. Builds a {@link Drive} service authenticated with
-     * the supplied Google {@link Account} using {@link DriveScopes#DRIVE_APPDATA}.
+     * Production constructor for <em>solo mode</em>.  Builds a {@link Drive} service
+     * authenticated with the supplied Google {@link Account} using
+     * {@link DriveScopes#DRIVE_APPDATA}.
      */
     public GoogleDriveSyncTransport(Context context, Account account) {
         this(buildDriveOps(context, account), 1_000L);
+    }
+
+    /**
+     * Production constructor for <em>household mode</em>.  Builds a {@link Drive} service
+     * using {@link DriveScopes#DRIVE_FILE} and returns a {@link HouseholdDriveOperations}
+     * that reads/writes per-device files inside the shared household folder.
+     *
+     * @param context           application context
+     * @param account           the signed-in Google account
+     * @param householdFolderId the shared household folder ID (non-null)
+     * @param deviceId          the local device UUID used to name this device's sync file
+     */
+    public GoogleDriveSyncTransport(Context context, Account account,
+            String householdFolderId, String deviceId) {
+        this(buildHouseholdDriveOps(context, account, householdFolderId, deviceId), 1_000L);
     }
 
     /**
@@ -166,7 +185,7 @@ public class GoogleDriveSyncTransport implements SyncTransport {
         }
     }
 
-    // ── Factory helper ────────────────────────────────────────────────────────
+    // ── Factory helpers ────────────────────────────────────────────────────────
 
     private static DriveOperations buildDriveOps(Context context, Account account) {
         GoogleAccountCredential credential = GoogleAccountCredential.usingOAuth2(
@@ -183,7 +202,13 @@ public class GoogleDriveSyncTransport implements SyncTransport {
         return new RealDriveOperations(driveService);
     }
 
-    // ── Inner interface & implementation ──────────────────────────────────────
+    private static DriveOperations buildHouseholdDriveOps(Context context, Account account,
+            String householdFolderId, String deviceId) {
+        Drive driveService = HouseholdManager.buildDrive(context, account);
+        return new HouseholdDriveOperations(driveService, householdFolderId, deviceId);
+    }
+
+    // ── Inner interface & implementations ─────────────────────────────────────
 
     /**
      * Thin wrapper around Drive API calls — package-private so tests can inject a mock.
@@ -257,6 +282,126 @@ public class GoogleDriveSyncTransport implements SyncTransport {
                 FileList result = drive.files().list()
                         .setSpaces(APP_DATA_FOLDER)
                         .setQ("name = '" + DRIVE_FILE_NAME + "'")
+                        .setFields("files(id)")
+                        .execute();
+                List<File> files = result.getFiles();
+                return (files != null && !files.isEmpty()) ? files.get(0).getId() : null;
+            } catch (GoogleJsonResponseException e) {
+                if (e.getStatusCode() == 401) throw new AuthException("Drive 401 on list", e);
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Household-mode {@link DriveOperations} implementation.
+     *
+     * <p>Each device maintains its own {@code dispensa_{deviceId}.json} file inside the
+     * shared household folder.  On upload the device overwrites (or creates) its own file.
+     * On download all <em>peer</em> files in the folder are fetched and their change lists
+     * are merged into a single blob before being returned to the caller.
+     *
+     * <p>All calls require {@link DriveScopes#DRIVE_FILE} scope.
+     */
+    static final class HouseholdDriveOperations implements DriveOperations {
+
+        /** Filename prefix shared by all per-device sync files. */
+        static final String FILE_PREFIX = "dispensa_";
+
+        private static final Gson GSON = new Gson();
+
+        private final Drive drive;
+        private final String folderId;
+        private final String deviceId;
+
+        HouseholdDriveOperations(Drive drive, String folderId, String deviceId) {
+            this.drive = drive;
+            this.folderId = folderId;
+            this.deviceId = deviceId;
+        }
+        /** Returns the filename for this device's sync file, e.g. {@code dispensa_abc123.json}. */
+        String deviceFileName() {
+            return FILE_PREFIX + deviceId + DRIVE_FILE_NAME;
+        }
+
+        /**
+         * Lists all {@code dispensa_*.json} files in the household folder (excluding this
+         * device's own file), downloads each, and merges their {@link SyncChange} lists into
+         * a single blob.  Returns {@code null} if there are no peer files or all peer files
+         * are empty.
+         */
+        @Override
+        public byte[] downloadSyncFile() throws IOException {
+            FileList result;
+            try {
+                result = drive.files().list()
+                        .setQ("'" + folderId + "' in parents"
+                                + " and name contains '" + FILE_PREFIX + "'")
+                        .setFields("files(id,name)")
+                        .execute();
+            } catch (GoogleJsonResponseException e) {
+                if (e.getStatusCode() == 401) throw new AuthException("Drive 401 on list", e);
+                throw e;
+            }
+
+            List<File> files = result.getFiles();
+            if (files == null || files.isEmpty()) return null;
+
+            String ownFileName = deviceFileName();
+            List<SyncChange> allChanges = new ArrayList<>();
+
+            for (File f : files) {
+                if (ownFileName.equals(f.getName())) continue; // skip this device's own file
+
+                try {
+                    ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    drive.files().get(f.getId()).executeMediaAndDownloadTo(out);
+                    String json = out.toString(StandardCharsets.UTF_8.name());
+                    SyncBlob peerBlob = GSON.fromJson(json, SyncBlob.class);
+                    if (peerBlob != null && peerBlob.changes != null) {
+                        allChanges.addAll(peerBlob.changes);
+                    }
+                } catch (GoogleJsonResponseException e) {
+                    if (e.getStatusCode() == 401) throw new AuthException("Drive 401 on download", e);
+                    if (e.getStatusCode() == 404) continue; // file disappeared between list and get
+                    throw e;
+                }
+            }
+
+            if (allChanges.isEmpty()) return null;
+            // senderDeviceId is null for the merged household blob (multiple sources)
+            return GSON.toJson(new SyncBlob(null, allChanges)).getBytes(StandardCharsets.UTF_8);
+        }
+
+        /**
+         * Uploads {@code content} as this device's sync file inside the household folder.
+         * Creates the file if it does not yet exist; updates it otherwise.
+         */
+        @Override
+        public void uploadSyncFile(byte[] content) throws IOException {
+            ByteArrayContent mediaContent = new ByteArrayContent(DRIVE_MIME_TYPE, content);
+            String fileName = deviceFileName();
+            String fileId = findDeviceFileId(fileName);
+            try {
+                if (fileId == null) {
+                    File meta = new File()
+                            .setName(fileName)
+                            .setParents(Collections.singletonList(folderId));
+                    drive.files().create(meta, mediaContent).setFields("id").execute();
+                } else {
+                    drive.files().update(fileId, new File(), mediaContent).execute();
+                }
+            } catch (GoogleJsonResponseException e) {
+                if (e.getStatusCode() == 401) throw new AuthException("Drive 401 on upload", e);
+                throw e;
+            }
+        }
+
+        private String findDeviceFileId(String fileName) throws IOException {
+            try {
+                FileList result = drive.files().list()
+                        .setQ("'" + folderId + "' in parents"
+                                + " and name = '" + fileName + "'")
                         .setFields("files(id)")
                         .execute();
                 List<File> files = result.getFiles();
