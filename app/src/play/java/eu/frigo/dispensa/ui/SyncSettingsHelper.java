@@ -202,6 +202,21 @@ public class SyncSettingsHelper {
                 + " hasData=" + (result.getData() != null));
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
             DebugLogger.w(TAG, "Sign-in cancelled or failed (resultCode=" + result.getResultCode() + ")");
+            // When the sign-in activity returns data even on failure, extract the ApiException
+            // to get the specific status code (e.g. 12500=SIGN_IN_FAILED, 12501=SIGN_IN_CANCELLED).
+            // This is essential for diagnosing OAuth configuration problems.
+            if (result.getData() != null) {
+                try {
+                    GoogleSignIn.getSignedInAccountFromIntent(result.getData())
+                            .getResult(ApiException.class);
+                } catch (ApiException e) {
+                    DebugLogger.w(TAG, "Sign-in ApiException: statusCode=" + e.getStatusCode()
+                            + " message=" + e.getStatus().getStatusMessage());
+                }
+            }
+            Toast.makeText(fragment.requireContext(),
+                    fragment.requireContext().getString(R.string.notify_sync_sign_in_failed),
+                    Toast.LENGTH_SHORT).show();
             return;
         }
         Task<GoogleSignInAccount> task =
@@ -577,7 +592,14 @@ public class SyncSettingsHelper {
                 .build();
         GoogleSignInClient client = GoogleSignIn.getClient(context, options);
         DebugLogger.i(TAG, "launchSignIn: launching sign-in intent");
-        launcher.launch(client.getSignInIntent());
+        try {
+            launcher.launch(client.getSignInIntent());
+        } catch (Exception e) {
+            DebugLogger.e(TAG, "launchSignIn: failed to launch sign-in intent", e);
+            Toast.makeText(context,
+                    context.getString(R.string.notify_sync_sign_in_failed),
+                    Toast.LENGTH_SHORT).show();
+        }
     }
 
     private static void signOut(Context context, Preference driveEnabledPref,
