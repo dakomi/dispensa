@@ -6,5 +6,5 @@
         Replace this placeholder before building the play flavor.
         See GOOGLE_CLOUD_SETUP.md for setup instructions.
     -->
-    <string name="google_web_client_id" translatable="false">YOUR_WEB_CLIENT_ID</string>
+    <string name="google_web_client_id" translatable="false">130878357796-3e0166b6pgtip9jfhjcbrddrve7qlh2n.apps.googleusercontent.com</string>
 </resources>
