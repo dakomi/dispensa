@@ -22,7 +22,8 @@
 - [Session 13 — Debug Logging Build](#session-13--debug-logging-build) *(~982–1048)*
 - [Session 14 — Google Sign-In Troubleshooting](#session-14--google-sign-in-troubleshooting) *(~1052–1113)*
 - [Session 15 — Credential Manager Migration + Google Cloud Setup Guide](#session-15--credential-manager-migration--google-cloud-setup-guide) *(~1117–1158)* ↳ has sub-sessions
-  - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1204)*
+  - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1185)*
+  - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1187–1222)*
 
 ---
 
@@ -1116,7 +1117,7 @@ This plan would be implemented as Session 11.
 
 ## Session 15 — Credential Manager Migration + Google Cloud Setup Guide
 
-> **Sub-sessions:** [15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode)
+> **Sub-sessions:** [15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) | [15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption)
 
 **Date:** 2026-04-27  
 **Goal:** Replace deprecated `GoogleSignIn`/`GoogleSignInClient` with the modern Android Credential Manager API and provide a complete Google Cloud Console setup guide.
@@ -1184,7 +1185,36 @@ This plan would be implemented as Session 11.
 - `./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all 26 tests pass.
 - CodeQL security scan — **0 alerts**.
 
+---
+
+## Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption
+
+**Date:** 2026-04-28  
+**Goal:** Fix `handleCredentialResponse` failing with "unexpected credential type: g" after the user completes the Sign in with Google account picker and grants the email permission.
+
+### What was done
+
+- **Root cause diagnosed from debug log:** The log showed `handleCredentialResponse: unexpected credential type: g` on every sign-in attempt after the account picker returned successfully. `"g"` is the minified/ProGuard-obfuscated class name of `androidx.credentials.CustomCredential`. `GetSignInWithGoogleOption` (introduced in 15.1) causes Credential Manager to return a `CustomCredential` whose `getType()` equals `GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL` — not a direct `GoogleIdTokenCredential` instance. The previous handler only checked `instanceof GoogleIdTokenCredential`, so the credential was always rejected and sign-in never completed.
+- **Fixed `SyncSettingsHelper.handleCredentialResponse`**: replaced the single `instanceof GoogleIdTokenCredential` guard with a two-branch check:
+  1. `instanceof GoogleIdTokenCredential` — direct cast (silent re-auth path via `GetGoogleIdOption`).
+  2. `instanceof CustomCredential && type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL` — unwrap with `GoogleIdTokenCredential.createFrom(data)` (picker path via `GetSignInWithGoogleOption`).
+- Added `import androidx.credentials.CustomCredential`.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — `handleCredentialResponse`: added `CustomCredential` unwrap branch; added `import androidx.credentials.CustomCredential`
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**.
+- CodeQL security scan — **0 alerts**.
+- Code review — no remaining issues (feedback to narrow the catch clause was resolved by removing the try-catch entirely, since `GoogleIdTokenCredential.createFrom()` does not declare a checked exception in `googleid:1.1.0`).
+
+---
+
 ### Handoff to Session 16
+
+_(Updated by Session 15.2: `handleCredentialResponse` now correctly handles `CustomCredential` returned by `GetSignInWithGoogleOption`; sign-in through the account picker now completes successfully.)_
 
 _(Updated by Session 15.1: `GetSignInWithGoogleOption` is now used for the picker step, so the Sign in with Google sheet should appear correctly in OAuth Testing mode. No handoff tasks were added or removed.)_
 

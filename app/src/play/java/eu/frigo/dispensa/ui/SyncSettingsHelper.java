@@ -17,6 +17,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.credentials.ClearCredentialStateRequest;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
+import androidx.credentials.CustomCredential;
 import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.ClearCredentialException;
@@ -649,7 +650,16 @@ public class SyncSettingsHelper {
             GetCredentialResponse response,
             ActivityResultLauncher<IntentSenderRequest> authLauncher) {
         androidx.credentials.Credential credential = response.getCredential();
-        if (!(credential instanceof GoogleIdTokenCredential)) {
+        GoogleIdTokenCredential googleCredential;
+        if (credential instanceof GoogleIdTokenCredential) {
+            googleCredential = (GoogleIdTokenCredential) credential;
+        } else if (credential instanceof CustomCredential
+                && GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                        .equals(credential.getType())) {
+            // GetSignInWithGoogleOption returns a CustomCredential wrapping a Google ID token.
+            googleCredential = GoogleIdTokenCredential.createFrom(
+                    ((CustomCredential) credential).getData());
+        } else {
             DebugLogger.w(TAG, "handleCredentialResponse: unexpected credential type: "
                     + credential.getClass().getSimpleName());
             Toast.makeText(fragment.requireContext(),
@@ -658,7 +668,6 @@ public class SyncSettingsHelper {
             return;
         }
 
-        GoogleIdTokenCredential googleCredential = (GoogleIdTokenCredential) credential;
         String email = googleCredential.getId();
         DebugLogger.i(TAG, "handleCredentialResponse: sign-in successful, email=" + email);
 
