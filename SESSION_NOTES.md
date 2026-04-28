@@ -1169,7 +1169,7 @@ This plan would be implemented as Session 11.
 - **Root cause diagnosed:** `GetGoogleIdOption(filterByAuthorized=false)` is validated by Play Services against the OAuth test-user list *before* rendering the bottom sheet. When no account on the device passes the check, it fires `NoCredentialException` silently (~500 ms, matching the debug logs stopping at `calling getCredentialAsync filterByAuthorized=false`). The "checkbox remains checked" was a consequence — the toggle was correctly reverted but sign-in never completed.
 - **Fixed `SyncSettingsHelper.doLaunchSignIn`**: replaced the `filterByAuthorized=false` retry (`GetGoogleIdOption`) with `GetSignInWithGoogleOption`. No new dependencies required — `GetSignInWithGoogleOption` is already in `googleid:1.1.0`. The two-step flow is now:
   1. `GetGoogleIdOption(filterByAuthorized=true)` — silent re-auth for returning users.
-  2. `GetSignInWithGoogleOption` — full Sign in with Google sheet; respects Testing mode correctly; shows a visible error to non-test accounts rather than failing silently.
+  2. `GetSignInWithGoogleOption` — full Sign in with Google sheet; shouls respect Testing mode correctly; shows a visible error to non-test accounts rather than failing silently.
 - **Improved error logging:** `onError` handler now logs the exception class name (`[NoCredentialException]`, `[GetCredentialCancellationException]`, etc.) alongside the message.
 - **`GOOGLE_CLOUD_SETUP.md` troubleshooting table** updated with a new row documenting this exact silent-failure symptom and its fix.
 
@@ -1186,10 +1186,10 @@ This plan would be implemented as Session 11.
 
 ### Handoff to Session 16
 
-_(Updated by Session 15.1: `GetSignInWithGoogleOption` is now used for the picker step, so the Sign in with Google sheet appears correctly in OAuth Testing mode. No handoff tasks were added or removed.)_
+_(Updated by Session 15.1: `GetSignInWithGoogleOption` is now used for the picker step, so the Sign in with Google sheet should appear correctly in OAuth Testing mode. No handoff tasks were added or removed.)_
 
 - **Before building the play APK**, replace `YOUR_WEB_CLIENT_ID` in `app/src/play/res/values/config.xml` following `GOOGLE_CLOUD_SETUP.md`.
-- **Expected sign-in flow (now working):** Settings → Sign in with Google → Standard "Sign in with Google" bottom sheet appears → user selects a listed test account → Drive scope consent screen (if not yet granted) → Drive sync enabled with Toast confirmation.
+- **Expected sign-in flow:** Settings → Sign in with Google → Standard "Sign in with Google" bottom sheet appears → user selects a listed test account → Drive scope consent screen (if not yet granted) → Drive sync enabled with Toast confirmation.
 - **Sign-in no longer uses an `ActivityResultLauncher<Intent>`** — the Credential Manager flow is callback-based and requires no activity result registration for the sign-in step itself.
 - **`PREF_SIGNED_IN_EMAIL`** (`sync_drive_signed_in_email`) is the source of truth for "who is signed in". `DriveTransportFactory.create()` reads this key; `SyncSettingsHelper` writes/clears it. `GoogleSignIn.getLastSignedInAccount()` is no longer called anywhere.
 - **Outstanding polish items** (carried forward):
