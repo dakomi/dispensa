@@ -332,7 +332,8 @@ public class SyncSettingsHelper {
         }
         Handler mainHandler = new Handler(Looper.getMainLooper());
         java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.execute(() ->
+        executor.execute(() -> {
+            try {
                 transport.pull(new SyncCallback() {
                     @Override
                     public void onSuccess(byte[] data) {
@@ -351,7 +352,16 @@ public class SyncSettingsHelper {
                         mainHandler.post(() -> Toast.makeText(context, msg,
                                 Toast.LENGTH_LONG).show());
                     }
-                }));
+                });
+            } catch (Exception e) {
+                // Safety net: pull() now handles all exceptions internally, but this catch
+                // ensures the app cannot crash if an Error or truly unexpected throwable escapes.
+                DebugLogger.e(TAG, "testDriveConnection: uncaught exception in executor", e);
+                String msg = context.getString(
+                        R.string.notify_sync_drive_test_fail, e.getMessage());
+                mainHandler.post(() -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
+            }
+        });
         executor.shutdown();
     }
 
@@ -473,8 +483,14 @@ public class SyncSettingsHelper {
                 }
                 String deepLink = HouseholdManager.generateJoinDeepLink(folderId);
                 mainHandler.post(() -> {
-                    refreshSignInState(fragment);
-                    showDeepLinkDialog(context, deepLink);
+                    if (fragment.isAdded()) {
+                        refreshSignInState(fragment);
+                    }
+                    try {
+                        showDeepLinkDialog(context, deepLink);
+                    } catch (Exception dialogEx) {
+                        DebugLogger.e(TAG, "createHousehold: could not show link dialog", dialogEx);
+                    }
                 });
             } catch (Exception e) {
                 DebugLogger.e(TAG, "createHousehold: failed", e);
@@ -509,7 +525,9 @@ public class SyncSettingsHelper {
                 DebugLogger.i(TAG, "joinHousehold: result=" + joined);
                 mainHandler.post(() -> {
                     if (joined) {
-                        refreshSignInState(fragment);
+                        if (fragment.isAdded()) {
+                            refreshSignInState(fragment);
+                        }
                         Toast.makeText(context,
                                 context.getString(R.string.notify_household_joined),
                                 Toast.LENGTH_SHORT).show();

@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1200-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1290-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~29–106)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~110–163)*
@@ -24,6 +24,7 @@
 - [Session 15 — Credential Manager Migration + Google Cloud Setup Guide](#session-15--credential-manager-migration--google-cloud-setup-guide) *(~1117–1158)* ↳ has sub-sessions
   - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1185)*
   - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1187–1222)*
+- [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)*
 
 ---
 
@@ -1232,3 +1233,58 @@ _(Updated by Session 15.1: `GetSignInWithGoogleOption` is now used for the picke
   - `Account` objects for Drive API calls are always constructed as `new Account(email, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE)` — never obtained from `GoogleSignIn`.
   - The Web Client ID (`google_web_client_id` string resource) must be replaced before the play flavor will work. It is intentionally left as a placeholder in the repo so each fork/release keystore owner supplies their own.
   - `setDriveAuthLauncher()` replaces the old `setSignInLauncher()` — it wires the sign-in preference button and passes the `authLauncher` to `launchSignIn()`.
+
+---
+
+## Session 16 — Drive API Crash Fixes + Stability Hardening
+
+**Date:** 2026-04-28  
+**Goal:** Fix fatal crashes in "Test Drive connection" and "Create a household" observed after a successful Credential Manager sign-in and Drive scope grant.
+
+### What was done
+
+#### Root cause analysis
+
+Both crashes were diagnosed from the exported debug log (provided in the problem statement).  Two distinct root causes were identified:
+
+**Root cause 1 — uncaught exception from `GoogleDriveSyncTransport`:**  
+`pull()` and `push()` only catch `IOException` and the inner `AuthException`.  In `play-services-auth 21.x`, `GoogleAccountCredential.intercept()` can propagate non-`IOException` types (e.g. `RuntimeException` from `GoogleAuthUtil.getToken()` or Play Services IPC) that bypass both catch clauses.  For `testDriveConnection`, the executor lambda `() -> transport.pull(...)` had **no exception handling at all**, so such an exception reached the thread's `UncaughtExceptionHandler` and killed the process.  This explains the 13–18 second gaps between `pull: starting` and `=== Dispensa debug log opened ===` (the IPC/HTTP call was in flight when the exception occurred) and the absence of any error log entry (the exception bypassed the `DebugLogger.e()` calls inside the catch blocks).
+
+**Root cause 2 — fragment lifecycle violation in `mainHandler.post()` callbacks:**  
+`createHousehold()` and `joinHousehold()` post a Runnable to the main thread after the background Drive call completes (~5 seconds). The Runnable called `refreshSignInState(fragment)` → `fragment.requireContext()` unconditionally.  If the host Activity had been recreated (e.g. screen rotation) during those 5 seconds, the captured `fragment` reference was already detached, causing `IllegalStateException: Fragment not attached to a context` on the **main thread**.  `showDeepLinkDialog()` calling `AlertDialog.show()` on a dead window could similarly throw `WindowManager$BadTokenException`.  Both are uncaught main-thread crashes.  This explains the fast subsequent crashes (0.15–0.18 s): on restart the Drive folder was already created (the `SharedPreferences.apply()` from the first attempt may not have flushed, so the button remained visible), the token request failed or succeeded quickly, and the same main-thread callback race fired again.
+
+#### Fixes applied
+
+- **`GoogleDriveSyncTransport.pull()` and `push()`:** added `catch (Exception e)` after `catch (IOException e)`.  Any `RuntimeException` or other non-`IOException` thrown by the Drive/auth layer is now caught, logged at `ERROR` level via `DebugLogger` and `Log`, and forwarded to the `SyncCallback` as a wrapped `IOException`.  This ensures errors always appear in the debug log and the app does not crash.
+
+- **`SyncSettingsHelper.testDriveConnection()` executor lambda:** wrapped the `transport.pull(...)` call in a `try { … } catch (Exception e)` block.  This is a belt-and-suspenders guard: `pull()` now handles everything internally, but this prevents any hypothetical future escape path from propagating to the thread's `UncaughtExceptionHandler`.
+
+- **`SyncSettingsHelper.createHousehold()` success callback:** added `if (fragment.isAdded())` guard before `refreshSignInState(fragment)`; wrapped `showDeepLinkDialog(context, deepLink)` in `try/catch(Exception)` to absorb `WindowManager$BadTokenException` or similar.
+
+- **`SyncSettingsHelper.joinHousehold()` success callback:** same `fragment.isAdded()` guard before `refreshSignInState(fragment)`.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/sync/GoogleDriveSyncTransport.java` — `pull()` and `push()`: added `catch (Exception e)` defensive handler
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — `testDriveConnection()`: executor lambda wrapped in try-catch; `createHousehold()`: `isAdded()` guard + `showDeepLinkDialog` try-catch; `joinHousehold()`: `isAdded()` guard
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**.
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testPlayDebugUnitTest` — **all tests pass**.
+
+---
+
+### Handoff to Session 17
+
+- **Drive API calls will now log errors instead of crashing.** If further Drive failures are observed, the debug log will contain `pull: unexpected Drive exception` / `push: unexpected Drive exception` lines with the full exception stack trace — use those to identify the next layer of the issue.
+- **If the debug log still shows no error before a crash**, the exception is likely an `Error` (e.g. `OutOfMemoryError`) rather than an `Exception` — consider adding `catch (Throwable t)` as an additional last-resort guard if that is confirmed.
+- **Outstanding polish items** (carried forward from Session 15):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
+- **Conventions established this session:**
+  - `GoogleDriveSyncTransport.pull()` and `push()` are now safe to call from any thread; all exceptions are delegated to `SyncCallback.onError()`.
+  - All `mainHandler.post()` callbacks that reference a `PreferenceFragmentCompat` must guard with `fragment.isAdded()` before calling `requireContext()` or `refreshSignInState(fragment)`.
+  - Dialog-show calls inside `mainHandler.post()` should be wrapped in `try/catch(Exception)` to absorb `WindowManager$BadTokenException`.
