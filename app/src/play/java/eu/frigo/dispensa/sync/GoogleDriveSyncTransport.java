@@ -142,7 +142,7 @@ public class GoogleDriveSyncTransport implements SyncTransport {
             callback.onError(e);
         } catch (Exception e) {
             // Guard against unexpected non-IOException from the auth/Drive layer (e.g.
-            // RuntimeException from GoogleAccountCredential / play-services-auth 21.x).
+            // RuntimeException from GoogleAccountCredential or newer play-services-auth versions).
             DebugLogger.e(TAG, "push: unexpected Drive exception", e);
             Log.e(TAG, "Unexpected Drive exception in push", e);
             callback.onError(new IOException("Unexpected Drive exception: " + e.getMessage(), e));
@@ -171,7 +171,7 @@ public class GoogleDriveSyncTransport implements SyncTransport {
             callback.onError(e);
         } catch (Exception e) {
             // Guard against unexpected non-IOException from the auth/Drive layer (e.g.
-            // RuntimeException from GoogleAccountCredential / play-services-auth 21.x).
+            // RuntimeException from GoogleAccountCredential or newer play-services-auth versions).
             DebugLogger.e(TAG, "pull: unexpected Drive exception", e);
             Log.e(TAG, "Unexpected Drive exception in pull", e);
             callback.onError(new IOException("Unexpected Drive exception: " + e.getMessage(), e));
