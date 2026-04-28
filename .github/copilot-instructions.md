@@ -69,12 +69,13 @@ Sessions are in **chronological order, oldest first**. Each session follows this
 
 #### Table of Contents
 
-`SESSION_NOTES.md` begins with a **Table of Contents** immediately after the title block. Every time you add a session or sub-session, update the ToC.
+`SESSION_NOTES.md` begins with a **Table of Contents** immediately after the title block. For every session or sub-session, update the ToC.
 
 - Each entry is a Markdown list item: `- [Session N — <title>](<anchor>) *(~<start>–<end>)*`
 - Sub-sessions are indented two spaces under their parent entry, with a ` ↳ has sub-sessions` marker on the parent line.
 - Include **approximate line ranges** so agents can jump directly to a section using `view_range` instead of reading the whole file.
-- The agent navigation note at the top of the ToC is: `> **Agent navigation:** Approximate line ranges are provided for efficient \`view_range\` lookups in this ~1200-line file. Ranges shift slightly if the ToC grows.`
+- The agent navigation note at the top of the ToC is: `> **Agent navigation:** Approximate line ranges are provided for efficient \`view_range\` lookups in this ~<approxLineCount>-line file. Ranges shift slightly as the ToC grows.`
+  - Chore: Should line ranges get out of sync, regenerate them by getting all session headers with line numbers `grep -n "^## Session" /home/runner/work/<repo_dir>/<repo_dir>/SESSION_NOTES.md`
 - GitHub Markdown anchor generation: lowercase the heading, remove all characters except `a–z`, `0–9`, spaces, and hyphens, then replace spaces with `-`.
 
 #### Sub-session placement
