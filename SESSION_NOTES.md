@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1450-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1380-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~29–106)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~110–163)*
@@ -25,7 +25,8 @@
   - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1185)*
   - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1187–1222)*
 - [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)* ↳ has sub-sessions
-  - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1297–1450)*
+  - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1279–1345)*
+  - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1347–1390)*
 
 ---
 
@@ -1327,7 +1328,42 @@ The `refreshSignInState(fragment)` call in the `createHousehold` success-path `m
 
 ---
 
+## Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt
+
+> _(Sub-session of Session 16; follow-up to 16.1 — verifies CI-reported missing classes against existing ProGuard rules.)_
+
+**Date:** 2026-04-28  
+**Goal:** Investigate the failed Release CI run, retrieve the R8 `missing_rules.txt` warnings, and confirm whether the `-dontwarn` rules added in Session 16.1 are sufficient or whether additional rules are needed.
+
+### What was done
+
+- Accessed GitHub Actions CI logs for the failed **Release** workflow run (ID `25045277350`, 2026-04-28 09:33 UTC) using the GitHub MCP server tools.
+- The build failed at `:app:minifyPlayReleaseWithR8` with the following missing-class warnings (all from Apache HttpClient bundled via the Google Drive SDK — desktop-Java APIs absent on Android):
+  - `javax.naming.NamingException`, `javax.naming.InvalidNameException`
+  - `javax.naming.directory.Attribute`, `javax.naming.directory.Attributes`
+  - `javax.naming.ldap.LdapName`, `javax.naming.ldap.Rdn`
+  - `org.ietf.jgss.GSSContext`, `org.ietf.jgss.GSSCredential`, `org.ietf.jgss.GSSException`, `org.ietf.jgss.GSSManager`, `org.ietf.jgss.GSSName`, `org.ietf.jgss.Oid`
+- Confirmed all reported classes are covered by the two wildcard rules already present in `proguard-rules.pro` from Session 16.1:
+  ```
+  -dontwarn javax.naming.**
+  -dontwarn org.ietf.jgss.**
+  ```
+- Ran `:app:minifyPlayReleaseWithR8` locally — **BUILD SUCCESSFUL** — no additional ProGuard rules are needed.
+- No code changes were required; this was a verification/investigation session.
+
+### Files changed
+
+- _(none — investigation only)_
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:minifyPlayReleaseWithR8` — **BUILD SUCCESSFUL**.
+
+---
+
 ### Handoff to Session 17
+
+_(Updated by Session 16.2: confirmed the existing `-dontwarn javax.naming.**` / `-dontwarn org.ietf.jgss.**` rules cover all classes reported in the failed CI run; no further ProGuard changes needed.)_
 
 - **The primary Drive API crash is now fixed at the root:** R8 will no longer optimise away Google API Client class structure. Both `testDriveConnection` and `createHousehold` / `joinHousehold` should succeed for users who have properly granted Drive scopes.
 - **If Drive calls still fail after this fix**, the debug log will now show the full error (including for previously-silent `createHousehold` force-closes). Look for `createHousehold: failed` / `joinHousehold: failed` lines.

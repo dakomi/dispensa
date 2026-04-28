@@ -32,3 +32,9 @@
 
 # Keep concrete subclasses of GenericJson so Gson can instantiate them.
 -keep class * extends com.google.api.client.json.GenericJson { *; }
+
+# Apache HttpClient (bundled via Google Drive SDK) references desktop-Java classes
+# (javax.naming.*, org.ietf.jgss.*) that do not exist on Android.  Suppress the
+# R8 missing-class errors so the build does not fail.
+-dontwarn javax.naming.**
+-dontwarn org.ietf.jgss.**
