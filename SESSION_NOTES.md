@@ -1090,6 +1090,45 @@ This plan would be implemented as Session 11.
 
 ---
 
+## Session 15.1 — Fix silent sign-in failure in OAuth Testing mode
+
+**Date:** 2026-04-28  
+**Goal:** Fix `GetGoogleIdOption(filterByAuthorized=false)` silently returning `NoCredentialException` without showing any UI when the OAuth consent screen is in Testing mode, causing the Sign-in button and Drive sync checkbox to do nothing visible.
+
+### What was done
+
+- **Root cause diagnosed:** `GetGoogleIdOption(filterByAuthorized=false)` is validated by Play Services against the OAuth test-user list *before* rendering the bottom sheet. When no account on the device passes the check, it fires `NoCredentialException` silently (~500 ms, matching the debug logs stopping at `calling getCredentialAsync filterByAuthorized=false`). The "checkbox remains checked" was a consequence — the toggle was correctly reverted but sign-in never completed.
+- **Fixed `SyncSettingsHelper.doLaunchSignIn`**: replaced the `filterByAuthorized=false` retry (`GetGoogleIdOption`) with `GetSignInWithGoogleOption`. No new dependencies required — `GetSignInWithGoogleOption` is already in `googleid:1.1.0`. The two-step flow is now:
+  1. `GetGoogleIdOption(filterByAuthorized=true)` — silent re-auth for returning users.
+  2. `GetSignInWithGoogleOption` — full Sign in with Google sheet; respects Testing mode correctly; shows a visible error to non-test accounts rather than failing silently.
+- **Improved error logging:** `onError` handler now logs the exception class name (`[NoCredentialException]`, `[GetCredentialCancellationException]`, etc.) alongside the message.
+- **`GOOGLE_CLOUD_SETUP.md` troubleshooting table** updated with a new row documenting this exact silent-failure symptom and its fix.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — `doLaunchSignIn`: use `GetSignInWithGoogleOption` for the picker step; added `GetSignInWithGoogleOption` import; improved error log message
+- `GOOGLE_CLOUD_SETUP.md` — added troubleshooting row for the silent sign-in failure
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**.
+- `./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL** — all 26 tests pass.
+- CodeQL security scan — **0 alerts**.
+
+### Handoff to Session 16
+
+_(Carries forward unchanged from Session 15's handoff — this sub-session only fixed the sign-in sheet not appearing.)_
+
+- **Before building the play APK**, replace `YOUR_WEB_CLIENT_ID` in `app/src/play/res/values/config.xml` following `GOOGLE_CLOUD_SETUP.md`.
+- **Expected sign-in flow (now working):** Settings → Sign in with Google → Standard "Sign in with Google" bottom sheet appears → user selects a listed test account → Drive scope consent screen → Drive sync enabled with Toast confirmation.
+- **Outstanding polish items** (carried forward):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
+
+---
+
 ## Session 15 — Credential Manager Migration + Google Cloud Setup Guide
 
 **Date:** 2026-04-27  

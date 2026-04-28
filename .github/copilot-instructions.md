@@ -70,3 +70,12 @@ When `PLAN.md` and `SESSION_NOTES.md` already exist:
 - Mark completed tasks with `[x]`.
 - Add new tasks discovered during the session.
 - Keep the overall structure intact; only update statuses and add tasks.
+
+---
+
+## Sub-session numbering and logging
+
+Sometimes a task is a small fix or follow-up that doesn't warrant a full new session entry in `PLAN.md` but still deserves a record in `SESSION_NOTES.md`.
+
+- **If the fix directly builds on the immediately preceding session** (e.g. a bug found while testing the previous session's code): log it as `Session N.1` (or `N.2`, etc.) in `SESSION_NOTES.md` only — do **not** add it to `PLAN.md`.
+- **If the fix does not directly build on the last session** (e.g. an unrelated hotfix or a task from a different area): **ask the user** how and whether they would like it logged before writing anything to either file.
