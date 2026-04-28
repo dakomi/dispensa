@@ -2,8 +2,11 @@ package eu.frigo.dispensa.sync;
 
 import android.accounts.Account;
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
+
+import java.util.UUID;
 
 import eu.frigo.dispensa.util.DebugLogger;
 
@@ -74,19 +77,19 @@ public class DriveTransportFactory {
 
         String householdFolderId = HouseholdManager.getHouseholdFolderId(context);
         if (householdFolderId != null) {
-            // Device ID is initialised by SyncManager; fall back to solo mode if not yet set.
-            String deviceId = PreferenceManager
-                    .getDefaultSharedPreferences(context)
-                    .getString(SyncManager.PREFS_KEY_DEVICE_ID, null);
-            if (deviceId != null) {
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+            String deviceId = prefs.getString(SyncManager.PREFS_KEY_DEVICE_ID, null);
+            if (deviceId == null) {
+                deviceId = UUID.randomUUID().toString();
+                prefs.edit().putString(SyncManager.PREFS_KEY_DEVICE_ID, deviceId).apply();
                 DebugLogger.i("DriveTransportFactory",
-                        "create: returning household transport, folderId=" + householdFolderId
-                                + " deviceId=" + deviceId);
-                return new GoogleDriveSyncTransport(context, account,
-                        householdFolderId, deviceId);
+                        "create: initialised new deviceId=" + deviceId);
             }
-            DebugLogger.w("DriveTransportFactory",
-                    "create: householdFolderId set but deviceId not yet initialised — falling back to solo mode");
+            DebugLogger.i("DriveTransportFactory",
+                    "create: returning household transport, folderId=" + householdFolderId
+                            + " deviceId=" + deviceId);
+            return new GoogleDriveSyncTransport(context, account,
+                    householdFolderId, deviceId);
         }
 
         DebugLogger.i("DriveTransportFactory",

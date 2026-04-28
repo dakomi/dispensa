@@ -27,6 +27,7 @@
 - [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)* ↳ has sub-sessions
   - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1279–1345)*
   - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1347–1390)*
+- [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1382–1450)*
 
 ---
 
@@ -1376,4 +1377,42 @@ _(Updated by Session 16.2: confirmed the existing `-dontwarn javax.naming.**` / 
   - Executor runnables that call Drive API methods must use `catch (Throwable e)` (not just `catch (Exception e)`) to guard against R8-related `Error` subclasses.
   - All `mainHandler.post()` callbacks that call `refreshSignInState(fragment)` must wrap it in `try/catch` or inside a guarded block to prevent main-thread crashes.
   - ProGuard rules must explicitly keep `com.google.api.client.**`, `com.google.api.services.drive.**`, `@Key`-annotated fields, and `GenericJson` subclasses for any release build that uses the Google Drive REST API client.
+
+---
+
+## Session 17 — Fix deviceId Init + Drive Sync Gating
+
+**Date:** 2026-04-28
+**Goal:** Fix two bugs found via live log analysis: (1) household transport falls back to solo because `deviceId` was never initialized, and (2) Drive sync data never uploads because `SyncWorker` exits early when local-network sync is disabled.
+
+### What was done
+
+**Bug 1 — `deviceId` not initialized (household falls back to solo)**
+- Root cause: `DriveTransportFactory.create()` reads `PREFS_KEY_DEVICE_ID` ("sync_device_id") from SharedPreferences. This key is only ever written by `SyncManager.getLocalDeviceId()`, which is only called during `exportChanges()` / `importChanges()` — i.e., during actual sync. When the user creates a household and then immediately tests the connection, no sync has yet run so the key is absent. The factory detected `householdFolderId` set but `deviceId == null` and fell back to solo mode.
+- Fix: In `DriveTransportFactory.create()`, when `householdFolderId` is set, get-or-create the `deviceId` directly (generate UUID, persist to SharedPreferences) instead of falling back to solo mode. This is the same logic as `SyncManager.getLocalDeviceId()` and is safe to do at factory time.
+
+**Bug 2 — Drive sync never runs (no data uploaded)**
+- Root cause: `SyncWorker.doWork()` had a hard early exit (`return Result.success()`) at the top when `sync_local_network_enabled == false`. Drive sync was positioned inside the same try/finally block, so it was also skipped.
+- Fix: Restructured `SyncWorker.doWork()` to check `sync_local_network_enabled` only for the local-network sync block (which is now an `if/else` branch instead of an early return). The Drive sync block runs unconditionally at the end of the method — regardless of whether local-network sync is enabled.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/sync/DriveTransportFactory.java` — replaced "fall back to solo if deviceId null" with get-or-create; added `UUID` and `SharedPreferences` imports
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — moved `AppDatabase`/`SyncManager` creation above the local-network check; converted early-exit to conditional block; moved Drive sync outside that block so it always executes
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 18
+
+- Both bugs are fixed. After this change:
+  - `testDriveConnection` after `createHousehold` will correctly use the household transport (log line: `create: returning household transport, folderId=… deviceId=…`).
+  - `SyncWorker` will run Drive sync on every scheduled execution, even when local-network sync is disabled.
+- **Outstanding polish items** (carried forward):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
 
