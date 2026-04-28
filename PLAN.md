@@ -353,3 +353,19 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Both flavors compile; all unit tests pass.
 
 **Tests:** Both flavors BUILD SUCCESSFUL; all unit tests pass.
+
+---
+
+### Session 16 — Drive API Crash Fixes + Stability Hardening
+
+**Goal:** Fix crashes in "Test Drive connection" and "Create a household" that appear after a successful sign-in / Drive authorization.
+
+- [x] Analyse exported debug log to identify root causes
+- [x] Fix `GoogleDriveSyncTransport.pull()` — add `catch (Exception e)` so any non-`IOException` (e.g. `RuntimeException` from `GoogleAccountCredential` / `play-services-auth 21.x`) is caught, logged, and forwarded to the callback instead of crashing the thread
+- [x] Fix `GoogleDriveSyncTransport.push()` — same defensive catch
+- [x] Fix `SyncSettingsHelper.testDriveConnection()` — wrap executor lambda body in try-catch so no exception can escape to the thread's `UncaughtExceptionHandler`
+- [x] Fix `SyncSettingsHelper.createHousehold()` — guard success `mainHandler.post()` with `fragment.isAdded()` before calling `refreshSignInState(fragment)`; wrap `showDeepLinkDialog()` in try-catch to prevent `WindowManager$BadTokenException` if the Activity has been recreated
+- [x] Fix `SyncSettingsHelper.joinHousehold()` — same `fragment.isAdded()` guard in success callback
+- [x] Update SESSION_NOTES.md and PLAN.md
+
+**Tests:** Play flavor BUILD SUCCESSFUL; all unit tests pass.
