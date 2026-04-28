@@ -33,6 +33,7 @@ import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
@@ -584,14 +585,27 @@ public class SyncSettingsHelper {
         Context context = fragment.requireContext();
         String webClientId = context.getString(R.string.google_web_client_id);
 
-        GetGoogleIdOption googleIdOption = new GetGoogleIdOption.Builder()
-                .setServerClientId(webClientId)
-                .setFilterByAuthorizedAccounts(filterByAuthorized)
-                .setAutoSelectEnabled(false)
-                .build();
+        // For the first attempt (filterByAuthorized=true) use GetGoogleIdOption so that a
+        // returning user is signed back in silently / with a one-tap bottom sheet.
+        // For the account-picker fallback use GetSignInWithGoogleOption: it shows the standard
+        // "Sign in with Google" sheet that works correctly for apps whose OAuth consent screen
+        // is still in Testing mode and for first-time sign-ins, unlike GetGoogleIdOption with
+        // filterByAuthorizedAccounts=false which silently returns NoCredentialException in
+        // those configurations.
+        androidx.credentials.CredentialOption credentialOption;
+        if (filterByAuthorized) {
+            credentialOption = new GetGoogleIdOption.Builder()
+                    .setServerClientId(webClientId)
+                    .setFilterByAuthorizedAccounts(true)
+                    .setAutoSelectEnabled(false)
+                    .build();
+        } else {
+            credentialOption = new GetSignInWithGoogleOption.Builder(webClientId)
+                    .build();
+        }
 
         GetCredentialRequest request = new GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
+                .addCredentialOption(credentialOption)
                 .build();
 
         CredentialManager credentialManager = CredentialManager.create(context);
@@ -611,12 +625,13 @@ public class SyncSettingsHelper {
                     @Override
                     public void onError(GetCredentialException e) {
                         if (filterByAuthorized && e instanceof NoCredentialException) {
-                            // No previously authorized account found — retry with account picker
+                            // No previously authorized account found — show the full picker
                             DebugLogger.i(TAG,
                                     "launchSignIn: no authorized account, retrying with picker");
                             doLaunchSignIn(fragment, authLauncher, /* filterByAuthorized= */ false);
                         } else {
-                            DebugLogger.w(TAG, "launchSignIn: sign-in failed: " + e.getMessage());
+                            DebugLogger.w(TAG, "launchSignIn: sign-in failed ["
+                                    + e.getClass().getSimpleName() + "]: " + e.getMessage());
                             Toast.makeText(context,
                                     context.getString(R.string.notify_sync_sign_in_failed),
                                     Toast.LENGTH_SHORT).show();
