@@ -14,3 +14,21 @@
 -keep class sun.misc.Unsafe { *; }
 -keep class com.google.gson.stream.** { *; }
 -keep class com.google.gson.annotations.SerializedName
+
+# ── Google API Client Library (Drive) ────────────────────────────────────────
+# R8 class-merging optimisation can make GenericJson and its subclasses abstract,
+# breaking the reflection-based Gson deserialization of Drive API responses with
+# "IllegalArgumentException: key error" / "unable to create new instance of class
+# X because it is abstract" errors.  Keep the full google-api-client and
+# google-api-services-drive class hierarchies intact.
+-keep class com.google.api.client.** { *; }
+-keep class com.google.api.services.drive.** { *; }
+
+# Keep all fields annotated with @Key — these drive Gson field-name mapping in
+# GenericData / GenericJson subclasses; stripping them produces "key error" at runtime.
+-keepclassmembers class * {
+    @com.google.api.client.util.Key <fields>;
+}
+
+# Keep concrete subclasses of GenericJson so Gson can instantiate them.
+-keep class * extends com.google.api.client.json.GenericJson { *; }

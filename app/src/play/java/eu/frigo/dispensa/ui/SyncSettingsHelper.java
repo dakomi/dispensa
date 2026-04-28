@@ -483,18 +483,21 @@ public class SyncSettingsHelper {
                 }
                 String deepLink = HouseholdManager.generateJoinDeepLink(folderId);
                 mainHandler.post(() -> {
-                    if (fragment.isAdded()) {
-                        refreshSignInState(fragment);
-                    }
                     try {
+                        if (fragment.isAdded()) {
+                            refreshSignInState(fragment);
+                        }
                         showDeepLinkDialog(context, deepLink);
                     } catch (Exception dialogEx) {
                         DebugLogger.e(TAG, "createHousehold: could not show link dialog", dialogEx);
                     }
                 });
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Catch Throwable (not just Exception) so that Error subclasses thrown by R8-
+                // optimised Drive API code (e.g. NoClassDefFoundError) are also captured and
+                // logged rather than crashing the app via the default uncaught-exception handler.
                 DebugLogger.e(TAG, "createHousehold: failed", e);
-                String msg = context.getString(R.string.err_household_create, e.getMessage());
+                String msg = context.getString(R.string.err_household_create, messageOf(e));
                 mainHandler.post(() ->
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
             }
@@ -525,8 +528,12 @@ public class SyncSettingsHelper {
                 DebugLogger.i(TAG, "joinHousehold: result=" + joined);
                 mainHandler.post(() -> {
                     if (joined) {
-                        if (fragment.isAdded()) {
-                            refreshSignInState(fragment);
+                        try {
+                            if (fragment.isAdded()) {
+                                refreshSignInState(fragment);
+                            }
+                        } catch (Exception uiEx) {
+                            DebugLogger.e(TAG, "joinHousehold: could not refresh UI state", uiEx);
                         }
                         Toast.makeText(context,
                                 context.getString(R.string.notify_household_joined),
@@ -537,14 +544,26 @@ public class SyncSettingsHelper {
                                 Toast.LENGTH_LONG).show();
                     }
                 });
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Catch Throwable so that Error subclasses from R8-optimised Drive API code
+                // are logged instead of crashing via the uncaught-exception handler.
                 DebugLogger.e(TAG, "joinHousehold: failed", e);
-                String msg = context.getString(R.string.err_household_join, e.getMessage());
+                String msg = context.getString(R.string.err_household_join, messageOf(e));
                 mainHandler.post(() ->
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
             }
         });
         executor.shutdown();
+    }
+
+    /**
+     * Returns {@link Throwable#getMessage()} if non-null, otherwise falls back to the
+     * simple class name.  Useful for displaying {@link Error} subclasses (e.g.
+     * {@link NoClassDefFoundError}) whose message may be null.
+     */
+    private static String messageOf(Throwable t) {
+        String msg = t.getMessage();
+        return msg != null ? msg : t.getClass().getSimpleName();
     }
 
     private static void leaveHousehold(Context context, PreferenceFragmentCompat fragment) {
