@@ -177,6 +177,7 @@ picker, and after selecting an account you should see the Drive scope consent sc
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Sign-in sheet never appears | `google_web_client_id` is still the placeholder `YOUR_WEB_CLIENT_ID` | Complete Step 6 |
+| Sign-in sheet never appears (logs stop at `calling getCredentialAsync filterByAuthorized=false`) | `GetGoogleIdOption` with `filterByAuthorized=false` silently fails for apps whose OAuth consent screen is in Testing mode — fixed in the code by using `GetSignInWithGoogleOption` for the picker step instead | Rebuild the app from this branch; ensure you are running a fresh build after the fix |
 | `GetCredentialException` / no accounts | No Android Client ID registered for this package + SHA-1 | Complete Step 5 |
 | Sign-in succeeds but Drive auth fails | Drive API not enabled, or Drive scopes not on consent screen | Steps 2 & 3 |
 | "This app is not verified" warning | OAuth consent screen in Testing mode and account not listed as test user | Add test users in Step 3 |
