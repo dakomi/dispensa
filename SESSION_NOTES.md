@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1290-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1450-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~29–106)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~110–163)*
@@ -24,7 +24,8 @@
 - [Session 15 — Credential Manager Migration + Google Cloud Setup Guide](#session-15--credential-manager-migration--google-cloud-setup-guide) *(~1117–1158)* ↳ has sub-sessions
   - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1185)*
   - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1187–1222)*
-- [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)*
+- [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)* ↳ has sub-sessions
+  - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1297–1450)*
 
 ---
 
@@ -1275,16 +1276,68 @@ Both crashes were diagnosed from the exported debug log (provided in the problem
 
 ---
 
+## Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API
+
+> _(Sub-session of Session 16; addresses new crash evidence from fresh install logs.)_
+
+**Date:** 2026-04-28  
+**Goal:** Fix the root cause of `IllegalArgumentException: key error` / `unable to create new instance of class X because it is abstract` errors in all Drive API calls, and ensure `createHousehold` / `joinHousehold` executor runnables can never silently force-close the app.
+
+### What was done
+
+#### Root cause analysis (new log evidence)
+
+Two new log sessions were provided showing the same `IllegalArgumentException: key error` error in `GoogleDriveSyncTransport$RealDriveOperations.findSyncFileId` calling `drive.files().list().execute()`.  The full stack trace identifies the root cause:
+
+```
+Caused by: java.lang.IllegalArgumentException: unable to create new instance of class y8.a
+    because it is abstract and because it has no accessible default constructor
+```
+
+`y8.a` is the R8-obfuscated name for a Google API Client data-model class (likely `com.google.api.client.json.GenericJson` or a direct subclass such as `com.google.api.services.drive.model.FileList`).  R8's **class-merging** optimisation merged a concrete class into an abstract ancestor, making it non-instantiable.  Gson (used by `GsonFactory.getDefaultInstance()`) tries to create an instance via reflection when deserialising the Drive API HTTP response and throws `IllegalArgumentException`.
+
+The missing ProGuard rules are the root cause:
+1. `com.google.api.client.**` and `com.google.api.services.drive.**` were not kept — R8 was free to merge, rename, and remove constructors.
+2. Fields annotated with `@com.google.api.client.util.Key` (the marker used for JSON field-name mapping in `GenericData`) were not kept — even if the class survived, field renaming would produce `"key error"` at runtime.
+
+Additionally, `createHousehold` and `joinHousehold` executor runnables only caught `Exception`, so if R8-broken code threw an `Error` subclass (e.g. `NoClassDefFoundError`, `ExceptionInInitializerError`) the uncaught error reached Android's default `UncaughtExceptionHandler` and force-closed the app with no entry in the debug log.
+
+The `refreshSignInState(fragment)` call in the `createHousehold` success-path `mainHandler.post()` lambda was also outside the existing `try/catch`, meaning any `RuntimeException` it threw (e.g. `IllegalStateException` from `fragment.requireContext()` on a detached fragment) would crash the main thread.
+
+#### Fixes applied
+
+- **`app/proguard-rules.pro`**: Added four new rules targeting the Google API Client library:
+  - `-keep class com.google.api.client.** { *; }` — prevents R8 from merging/removing any google-api-client class.
+  - `-keep class com.google.api.services.drive.** { *; }` — same for the Drive v3 model and service classes.
+  - `-keepclassmembers class * { @com.google.api.client.util.Key <fields>; }` — preserves all `@Key`-annotated fields used by `GenericData` JSON mapping; absence of this rule is the direct cause of `"key error"` at runtime.
+  - `-keep class * extends com.google.api.client.json.GenericJson { *; }` — ensures all concrete `GenericJson` subclasses (including Drive model POJOs) retain their default constructors for Gson instantiation.
+
+- **`SyncSettingsHelper.createHousehold()` executor runnable:** changed `catch (Exception e)` to `catch (Throwable e)` so that `Error` subclasses from R8-broken or other system code are captured and shown to the user as a toast rather than silently force-closing the app.  Also unified `refreshSignInState(fragment)` inside the `try/catch` block in the `mainHandler.post()` callback so it can no longer throw an uncaught exception on the main thread.
+
+- **`SyncSettingsHelper.joinHousehold()` executor runnable:** same `catch (Throwable e)` change; `refreshSignInState(fragment)` wrapped in its own `try/catch` for the same reason.
+
+### Files changed
+
+- `app/proguard-rules.pro` — added Google API Client library keep rules
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — `createHousehold()` and `joinHousehold()`: `catch (Throwable e)`, `refreshSignInState` guarded inside try-catch
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**.
+
+---
+
 ### Handoff to Session 17
 
-- **Drive API calls will now log errors instead of crashing.** If further Drive failures are observed, the debug log will contain `pull: unexpected Drive exception` / `push: unexpected Drive exception` lines with the full exception stack trace — use those to identify the next layer of the issue.
-- **If the debug log still shows no error before a crash**, the exception is likely an `Error` (e.g. `OutOfMemoryError`) rather than an `Exception` — consider adding `catch (Throwable t)` as an additional last-resort guard if that is confirmed.
-- **Outstanding polish items** (carried forward from Session 15):
+- **The primary Drive API crash is now fixed at the root:** R8 will no longer optimise away Google API Client class structure. Both `testDriveConnection` and `createHousehold` / `joinHousehold` should succeed for users who have properly granted Drive scopes.
+- **If Drive calls still fail after this fix**, the debug log will now show the full error (including for previously-silent `createHousehold` force-closes). Look for `createHousehold: failed` / `joinHousehold: failed` lines.
+- **Outstanding polish items** (carried forward):
   - Copy-to-clipboard button in the household deep-link dialog.
   - QR code generation for the join link.
   - Household folder friendly name in status preference.
   - Notification/badge when new pending sync devices arrive.
-- **Conventions established this session:**
-  - `GoogleDriveSyncTransport.pull()` and `push()` are now safe to call from any thread; all exceptions are delegated to `SyncCallback.onError()`.
-  - All `mainHandler.post()` callbacks that reference a `PreferenceFragmentCompat` must guard with `fragment.isAdded()` before calling `requireContext()` or `refreshSignInState(fragment)`.
-  - Dialog-show calls inside `mainHandler.post()` should be wrapped in `try/catch(Exception)` to absorb `WindowManager$BadTokenException`.
+- **Conventions established:**
+  - Executor runnables that call Drive API methods must use `catch (Throwable e)` (not just `catch (Exception e)`) to guard against R8-related `Error` subclasses.
+  - All `mainHandler.post()` callbacks that call `refreshSignInState(fragment)` must wrap it in `try/catch` or inside a guarded block to prevent main-thread crashes.
+  - ProGuard rules must explicitly keep `com.google.api.client.**`, `com.google.api.services.drive.**`, `@Key`-annotated fields, and `GenericJson` subclasses for any release build that uses the Google Drive REST API client.
+
