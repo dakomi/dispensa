@@ -42,7 +42,9 @@ When `PLAN.md` and `SESSION_NOTES.md` already exist:
 
 ## Updating the tracking files (every session)
 
-### `SESSION_NOTES.md` — append a new section:
+### `SESSION_NOTES.md` — structure and format
+
+Sessions are in **chronological order, oldest first**. Each session follows this template:
 
 ```
 ## Session N — <short title>
@@ -64,6 +66,27 @@ When `PLAN.md` and `SESSION_NOTES.md` already exist:
 - Any known issues or blockers.
 - Conventions or patterns established this session that must be followed.
 ```
+
+#### Table of Contents
+
+`SESSION_NOTES.md` begins with a **Table of Contents** immediately after the title block. Every time you add a session or sub-session, update the ToC.
+
+- Each entry is a Markdown list item: `- [Session N — <title>](<anchor>) *(~<start>–<end>)*`
+- Sub-sessions are indented two spaces under their parent entry, with a ` ↳ has sub-sessions` marker on the parent line.
+- Include **approximate line ranges** so agents can jump directly to a section using `view_range` instead of reading the whole file.
+- The agent navigation note at the top of the ToC is: `> **Agent navigation:** Approximate line ranges are provided for efficient \`view_range\` lookups in this ~1200-line file. Ranges shift slightly if the ToC grows.`
+- GitHub Markdown anchor generation: lowercase the heading, remove all characters except `a–z`, `0–9`, spaces, and hyphens, then replace spaces with `-`.
+
+#### Sub-session placement
+
+When a session has sub-sessions:
+
+1. Add a blockquote link under the session's `##` header (before `**Date:**`):
+   ```
+   > **Sub-sessions:** [N.1 — <title>](<anchor>)
+   ```
+2. Place the sub-session's full section (header, body) **after** the parent session's body and **before** the shared Handoff.
+3. There is **one Handoff** at the end — written by whichever session/sub-session ran last. If a sub-session modifies the handoff, prepend a one-line `_(Updated by Session N.x: ...)_` note explaining what changed.
 
 ### `PLAN.md` — update task checkboxes:
 
