@@ -1,10 +1,20 @@
 package eu.frigo.dispensa.sync;
 
+import android.Manifest;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.net.wifi.WifiManager;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -13,10 +23,12 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import eu.frigo.dispensa.R;
 import eu.frigo.dispensa.util.DebugLogger;
 
 /**
@@ -59,8 +71,15 @@ public class LocalNetworkSyncTransport implements SyncTransport {
     /** Maximum accepted blob size (16 MiB) to guard against malicious peers. */
     private static final int MAX_BLOB_SIZE_BYTES = 16 * 1024 * 1024;
 
+    /** Notification channel ID for sync device approval requests. */
+    public static final String CHANNEL_ID_SYNC_DEVICE = "SYNC_DEVICE_CHANNEL";
+
+    /** Notification ID used for the pending-device approval notification. */
+    private static final int NOTIFICATION_ID_SYNC_DEVICE = 2;
+
     // ── Dependencies ──────────────────────────────────────────────────────────
 
+    private final Context context;  // application context; may be null in unit tests
     private final NsdManager nsdManager;
     private final WifiManager.MulticastLock multicastLock;  // may be null in tests
     private final SyncManager syncManager;
@@ -87,6 +106,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
      */
     public LocalNetworkSyncTransport(Context context, SyncManager syncManager) {
         this(
+                context.getApplicationContext(),
                 (NsdManager) context.getSystemService(Context.NSD_SERVICE),
                 buildMulticastLock(context),
                 syncManager,
@@ -104,7 +124,7 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             WifiManager.MulticastLock multicastLock,
             SyncManager syncManager,
             ExecutorService executor) {
-        this(nsdManager, multicastLock, syncManager, executor, null);
+        this(null, nsdManager, multicastLock, syncManager, executor, null);
     }
 
     /**
@@ -118,6 +138,16 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             SyncManager syncManager,
             ExecutorService executor,
             SyncPermissionManager permissionManager) {
+        this(null, nsdManager, multicastLock, syncManager, executor, permissionManager);
+    }
+
+    private LocalNetworkSyncTransport(Context context,
+            NsdManager nsdManager,
+            WifiManager.MulticastLock multicastLock,
+            SyncManager syncManager,
+            ExecutorService executor,
+            SyncPermissionManager permissionManager) {
+        this.context = context;
         this.nsdManager = nsdManager;
         this.multicastLock = multicastLock;
         this.syncManager = syncManager;
@@ -278,11 +308,16 @@ public class LocalNetworkSyncTransport implements SyncTransport {
                     return;
                 }
                 if (!permissionManager.isTrusted(senderDeviceId)) {
+                    Set<String> alreadyPending = permissionManager.getPendingDeviceIds();
+                    boolean isNew = !alreadyPending.contains(senderDeviceId);
                     permissionManager.markPending(senderDeviceId);
                     DebugLogger.w(TAG, "handleIncomingConnection: rejected untrusted device "
                             + senderDeviceId + " — added to pending");
                     Log.d(TAG, "Rejected sync from untrusted device " + senderDeviceId
                             + " — added to pending list");
+                    if (isNew) {
+                        postPendingDeviceNotification(context);
+                    }
                     writeEmptyBlob(out);
                     return;
                 }
@@ -485,5 +520,48 @@ public class LocalNetworkSyncTransport implements SyncTransport {
             Log.w(TAG, "Could not create MulticastLock", e);
         }
         return null;
+    }
+
+    /**
+     * Posts a notification informing the user that a new device is waiting for approval to
+     * sync over the local network.  Only called the first time a device is seen (not on
+     * every repeated connection attempt).
+     *
+     * @param ctx application context
+     */
+    private void postPendingDeviceNotification(Context ctx) {
+        if (ctx == null) return;
+        try {
+            // Open SettingsActivity so the user can navigate to Manage trusted devices
+            Intent intent = new Intent();
+            intent.setClassName(ctx, "eu.frigo.dispensa.activity.SettingsActivity");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            PendingIntent pendingIntent = PendingIntent.getActivity(
+                    ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+            String title = ctx.getString(R.string.notify_sync_device_pending_title);
+            String text = ctx.getString(R.string.notify_sync_device_pending_text);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(ctx, CHANNEL_ID_SYNC_DEVICE)
+                    .setSmallIcon(R.drawable.ic_fridge)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true);
+
+            NotificationManagerCompat notificationManager = NotificationManagerCompat.from(ctx);
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                if (ActivityCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    DebugLogger.w(TAG, "postPendingDeviceNotification: POST_NOTIFICATIONS not granted");
+                    return;
+                }
+            }
+            notificationManager.notify(NOTIFICATION_ID_SYNC_DEVICE, builder.build());
+            DebugLogger.i(TAG, "postPendingDeviceNotification: posted");
+        } catch (Exception e) {
+            DebugLogger.e(TAG, "postPendingDeviceNotification: failed", e);
+        }
     }
 }

@@ -140,6 +140,7 @@ dependencies {
     annotationProcessor(libs.room.compiler)
 
     "fdroidImplementation"(libs.zxing.android.embedded)
+    "playImplementation"(libs.zxing.core)
     "playImplementation"(libs.play.services.mlkit.barcode.scanning)
     "playImplementation"(libs.text.recognition)
     "playImplementation"(libs.credentials)

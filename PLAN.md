@@ -369,3 +369,21 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Update SESSION_NOTES.md and PLAN.md
 
 **Tests:** Play flavor BUILD SUCCESSFUL; all unit tests pass.
+
+---
+
+### Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button
+
+**Goal:** Fix the root cause of empty household folder (SyncWorker never scheduled for Drive-only users), add sync-on-change after pantry item mutations, and add a context-aware manual sync button.
+
+- [x] Fix `Dispensa.java` `scheduleSyncIfEnabled()` — now also checks `sync_drive_enabled`; schedules periodic sync when either local-network OR Drive sync is enabled
+- [x] Fix `SettingsFragment.onSharedPreferenceChanged()` for `sync_drive_enabled` — start periodic sync when Drive is enabled, stop it (when local is also off) when Drive is disabled
+- [x] Fix `SettingsFragment.onSharedPreferenceChanged()` for `sync_local_network_enabled` — only cancel periodic sync when both local AND Drive are disabled
+- [x] Feature: trigger `SyncWorkerScheduler.triggerManualSync()` after every product insert/delete/update in `Repository.java` (covers `insert`, `delete`, `update`, `insertProductWithApiTags`, `updateProductWithApiTags`)
+- [x] Feature: context-aware "Sync now" button — `updateManualSyncSummary()` sets the summary to reflect active sync modes (local / Drive / both / none); button is disabled when no sync is enabled
+- [x] Add 4 new string resources (en + it): `pref_sync_trigger_manual_summary_local/drive/both/none`
+- [x] Household deep-link dialog: copy-to-clipboard button + QR code (ZXing core 3.5.3 play dep)
+- [x] Household folder friendly name stored in SharedPreferences and shown in status preference
+- [x] Notification when a new untrusted device is first added to pending list
+
+**Tests:** Both flavors BUILD SUCCESSFUL; all 26 unit tests pass.

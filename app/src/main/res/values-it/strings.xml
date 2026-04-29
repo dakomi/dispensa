@@ -220,6 +220,10 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_sync_last_timestamp_never">Mai</string>
     <string name="pref_sync_trigger_manual_title">Sincronizza ora</string>
     <string name="pref_sync_trigger_manual_summary">Avvia una sincronizzazione immediata con i dispositivi vicini</string>
+    <string name="pref_sync_trigger_manual_summary_local">Sincronizza con i dispositivi vicini sulla rete locale</string>
+    <string name="pref_sync_trigger_manual_summary_drive">Sincronizza con Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_both">Sincronizza con i dispositivi vicini e Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_none">Abilita prima la sincronizzazione locale o con Google Drive</string>
     <string name="pref_sync_drive_title">Sincronizzazione Google Drive</string>
     <string name="pref_sync_drive_summary">Esegui il backup e la sincronizzazione della tua dispensa tramite Google Drive</string>
     <string name="pref_sync_drive_account_title">Account Google</string>
@@ -279,6 +283,8 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="dialog_leave_household_ok">Lascia</string>
     <string name="dialog_household_link_title">Condividi questo link</string>
     <string name="dialog_household_link_message">Copia e condividi questo link d\'invito con i membri del nucleo familiare. Possono incollarlo in Dispensa per unirsi.</string>
+    <string name="dialog_household_link_copy">Copia link</string>
+    <string name="dialog_household_link_copied">Link di invito copiato negli appunti</string>
     <string name="hint_household_emails">es. alice@gmail.com, bob@gmail.com</string>
     <string name="hint_household_folder_id">Incolla link d\'invito o ID cartella</string>
     <string name="notify_household_joined">Nucleo familiare raggiunto ✓</string>
@@ -286,6 +292,11 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="err_household_create">Creazione nucleo familiare non riuscita: %1$s</string>
     <string name="err_household_join">Accesso al nucleo familiare non riuscito: %1$s</string>
     <string name="err_household_join_not_found">Nucleo familiare non trovato. Controlla l\'ID cartella e assicurati di essere stato invitato.</string>
+
+    <!-- Sync device approval notifications -->
+    <string name="sync_device_notification_channel_name">Richieste di sincronizzazione</string>
+    <string name="notify_sync_device_pending_title">Nuova richiesta di sincronizzazione</string>
+    <string name="notify_sync_device_pending_text">Un dispositivo vuole sincronizzarsi con Dispensa. Tocca per verificare.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">Nessun prodotto trovato con questo codice a barre</string>

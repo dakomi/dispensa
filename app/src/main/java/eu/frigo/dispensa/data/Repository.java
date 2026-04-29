@@ -16,6 +16,7 @@ import eu.frigo.dispensa.data.product.Product;
 import eu.frigo.dispensa.data.product.ProductDao;
 import eu.frigo.dispensa.data.storage.StorageLocation;
 import eu.frigo.dispensa.data.storage.StorageLocationDao;
+import eu.frigo.dispensa.work.SyncWorkerScheduler;
 
 public class Repository {
     private final ProductDao productDao;
@@ -23,8 +24,10 @@ public class Repository {
     private final ProductCategoryLinkDao productCategoryLinkDao;
     private final StorageLocationDao storageLocationDao;
     private final LiveData<List<ProductWithCategoryDefinitions>> allProducts;
+    private final Application application;
 
     public Repository(Application application) {
+        this.application = application;
         AppDatabase db = AppDatabase.getDatabase(application);
         productDao = db.productDao();
         categoryDefinitionDao = db.categoryDefinitionDao();
@@ -56,6 +59,7 @@ public class Repository {
     public void insert(Product product) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
             productDao.insert(product);
+            SyncWorkerScheduler.triggerManualSync(application);
         });
     }
 
@@ -63,6 +67,7 @@ public class Repository {
         AppDatabase.databaseWriteExecutor.execute(() -> {
             deleteLocalImageIfAny(selectedProduct.getImageUrl());
             productDao.delete(selectedProduct);
+            SyncWorkerScheduler.triggerManualSync(application);
         });
     }
 
@@ -74,6 +79,7 @@ public class Repository {
                 deleteLocalImageIfAny(oldProduct.getImageUrl());
             }
             productDao.update(product);
+            SyncWorkerScheduler.triggerManualSync(application);
         });
     }
 
@@ -115,6 +121,7 @@ public class Repository {
                     productCategoryLinkDao.insertAll(linksToInsert);
                 }
             }
+            SyncWorkerScheduler.triggerManualSync(application);
         });
     }
 
@@ -149,6 +156,7 @@ public class Repository {
                     productCategoryLinkDao.insertAll(linksToInsert);
                 }
             }
+            SyncWorkerScheduler.triggerManualSync(application);
         });
     }
     public LiveData<List<StorageLocation>> getAllLocationsSorted() {

@@ -182,6 +182,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 return true;
             });
         }
+        updateManualSyncSummary();
 
         syncLocalPeersStatusPreference = findPreference(KEY_SYNC_LOCAL_PEERS_STATUS);
         updateLocalPeersStatus(0);
@@ -308,6 +309,31 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     }
 
     /**
+     * Updates the "Sync now" preference summary to reflect which sync methods are currently
+     * enabled (local network, Drive, both, or neither).
+     */
+    private void updateManualSyncSummary() {
+        Preference manualSyncPref = findPreference(KEY_SYNC_TRIGGER_MANUAL);
+        if (manualSyncPref == null) return;
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean localEnabled = prefs.getBoolean(SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED, false);
+        boolean driveEnabled = prefs.getBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false);
+        final String summary;
+        if (localEnabled && driveEnabled) {
+            summary = getString(R.string.pref_sync_trigger_manual_summary_both);
+        } else if (localEnabled) {
+            summary = getString(R.string.pref_sync_trigger_manual_summary_local);
+        } else if (driveEnabled) {
+            summary = getString(R.string.pref_sync_trigger_manual_summary_drive);
+        } else {
+            summary = getString(R.string.pref_sync_trigger_manual_summary_none);
+        }
+        manualSyncPref.setSummary(summary);
+        manualSyncPref.setEnabled(localEnabled || driveEnabled);
+    }
+
+
+    /**
      * Runs a short NSD scan (~{@value #PEER_SCAN_DURATION_MS} ms) on a background thread,
      * then shows the discovered peers in an {@link AlertDialog}.
      */
@@ -373,6 +399,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         Objects.requireNonNull(getPreferenceManager().getSharedPreferences()).registerOnSharedPreferenceChangeListener(this);
         updateNotificationTimeSummary();
         updateLastSyncSummary();
+        updateManualSyncSummary();
         SyncSettingsHelper.refreshAccountSummary(this);
         if (languagePreference != null) {
             String currentLangValue = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -404,19 +431,32 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         } else if (KEY_SYNC_LOCAL_NETWORK_ENABLED.equals(key)) {
             if (context == null) return;
             boolean enabled = sharedPreferences.getBoolean(key, false);
+            boolean driveEnabled = sharedPreferences.getBoolean(
+                    DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false);
             if (enabled) {
                 SyncWorkerScheduler.schedulePeriodicSync(context);
                 Log.d(TAG, "Local network sync enabled — periodic work scheduled.");
-            } else {
+            } else if (!driveEnabled) {
                 SyncWorkerScheduler.cancelPeriodicSync(context);
                 Log.d(TAG, "Local network sync disabled — periodic work cancelled.");
             }
+            updateManualSyncSummary();
         } else if (DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED.equals(key)) {
             if (context == null) return;
             boolean enabled = sharedPreferences.getBoolean(key, false);
+            boolean localEnabled = sharedPreferences.getBoolean(
+                    SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED, false);
+            if (enabled) {
+                SyncWorkerScheduler.schedulePeriodicSync(context);
+                Log.d(TAG, "Drive sync enabled — periodic work scheduled.");
+            } else if (!localEnabled) {
+                SyncWorkerScheduler.cancelPeriodicSync(context);
+                Log.d(TAG, "Drive sync disabled — periodic work cancelled.");
+            }
             // In play flavor: auto-launches sign-in if user is not yet authenticated.
             // In fdroid flavor: no-op.
             SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleDriveAuthLauncher);
+            updateManualSyncSummary();
         }
     }
     private void updateLanguagePreferenceSummary(String languageValue) {

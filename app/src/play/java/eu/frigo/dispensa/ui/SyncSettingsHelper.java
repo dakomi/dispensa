@@ -2,12 +2,18 @@ package eu.frigo.dispensa.ui;
 
 import android.accounts.Account;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.util.Log;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResult;
@@ -38,6 +44,10 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.WriterException;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 
 import java.util.Arrays;
 import java.util.List;
@@ -302,7 +312,7 @@ public class SyncSettingsHelper {
             if (signedIn) {
                 householdStatusPref.setSummary(inHousehold
                         ? context.getString(R.string.pref_sync_drive_household_status_active,
-                                HouseholdManager.getHouseholdFolderId(context))
+                                householdDisplayName(context))
                         : context.getString(R.string.pref_sync_drive_household_status_solo));
             }
         }
@@ -582,18 +592,86 @@ public class SyncSettingsHelper {
     }
 
     private static void showDeepLinkDialog(Context context, String deepLink) {
+        // Build a vertical layout: QR code image + read-only link text
+        LinearLayout dialogView = new LinearLayout(context);
+        dialogView.setOrientation(LinearLayout.VERTICAL);
+        int padPx = (int) (16 * context.getResources().getDisplayMetrics().density);
+        dialogView.setPadding(padPx, padPx, padPx, 0);
+
+        ImageView qrImageView = new ImageView(context);
+        int qrSizePx = (int) (240 * context.getResources().getDisplayMetrics().density);
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(qrSizePx, qrSizePx);
+        qrParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        qrParams.bottomMargin = padPx;
+        qrImageView.setLayoutParams(qrParams);
+        Bitmap qrBitmap = generateQrBitmap(deepLink, qrSizePx);
+        if (qrBitmap != null) {
+            qrImageView.setImageBitmap(qrBitmap);
+        } else {
+            qrImageView.setVisibility(android.view.View.GONE);
+        }
+        dialogView.addView(qrImageView);
+
         EditText linkView = new EditText(context);
         linkView.setText(deepLink);
         linkView.setFocusable(false);
         linkView.setClickable(false);
         linkView.setLongClickable(true);
+        dialogView.addView(linkView);
 
         new AlertDialog.Builder(context)
                 .setTitle(R.string.dialog_household_link_title)
                 .setMessage(R.string.dialog_household_link_message)
-                .setView(linkView)
-                .setPositiveButton(R.string.ok, null)
+                .setView(dialogView)
+                .setPositiveButton(R.string.dialog_household_link_copy, (dlg, which) -> {
+                    ClipboardManager clipboard = (ClipboardManager)
+                            context.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Dispensa invite link", deepLink));
+                    }
+                    Toast.makeText(context,
+                            context.getString(R.string.dialog_household_link_copied),
+                            Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    /**
+     * Generates a square QR code bitmap for the given content.
+     *
+     * @param content the string to encode
+     * @param sizePx  the width and height of the resulting bitmap in pixels
+     * @return a {@link Bitmap}, or {@code null} if encoding fails
+     */
+    private static Bitmap generateQrBitmap(String content, int sizePx) {
+        try {
+            QRCodeWriter writer = new QRCodeWriter();
+            BitMatrix matrix = writer.encode(content, BarcodeFormat.QR_CODE, sizePx, sizePx);
+            int[] pixels = new int[sizePx * sizePx];
+            for (int y = 0; y < sizePx; y++) {
+                for (int x = 0; x < sizePx; x++) {
+                    pixels[y * sizePx + x] = matrix.get(x, y) ? Color.BLACK : Color.WHITE;
+                }
+            }
+            Bitmap bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.RGB_565);
+            bitmap.setPixels(pixels, 0, sizePx, 0, 0, sizePx, sizePx);
+            return bitmap;
+        } catch (WriterException e) {
+            DebugLogger.w(TAG, "generateQrBitmap: failed to encode QR code: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Returns the household folder display name for the status preference summary.
+     * Falls back to the folder ID if no name is stored.
+     */
+    private static String householdDisplayName(Context context) {
+        String name = HouseholdManager.getHouseholdFolderName(context);
+        if (name != null && !name.isEmpty()) return name;
+        String id = HouseholdManager.getHouseholdFolderId(context);
+        return id != null ? id : "";
     }
 
     // ── Sign-in (Credential Manager) ──────────────────────────────────────────
