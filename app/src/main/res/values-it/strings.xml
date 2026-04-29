@@ -220,6 +220,10 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_sync_last_timestamp_never">Mai</string>
     <string name="pref_sync_trigger_manual_title">Sincronizza ora</string>
     <string name="pref_sync_trigger_manual_summary">Avvia una sincronizzazione immediata con i dispositivi vicini</string>
+    <string name="pref_sync_trigger_manual_summary_local">Sincronizza con i dispositivi vicini sulla rete locale</string>
+    <string name="pref_sync_trigger_manual_summary_drive">Sincronizza con Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_both">Sincronizza con i dispositivi vicini e Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_none">Abilita prima la sincronizzazione locale o con Google Drive</string>
     <string name="pref_sync_drive_title">Sincronizzazione Google Drive</string>
     <string name="pref_sync_drive_summary">Esegui il backup e la sincronizzazione della tua dispensa tramite Google Drive</string>
     <string name="pref_sync_drive_account_title">Account Google</string>

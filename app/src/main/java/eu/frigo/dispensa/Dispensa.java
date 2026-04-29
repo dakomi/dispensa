@@ -28,7 +28,10 @@ public class Dispensa extends Application {
 
     private void scheduleSyncIfEnabled() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        if (prefs.getBoolean(SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED, false)) {
+        boolean localEnabled = prefs.getBoolean(SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED, false);
+        boolean driveEnabled = prefs.getBoolean(
+                eu.frigo.dispensa.sync.DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false);
+        if (localEnabled || driveEnabled) {
             SyncWorkerScheduler.schedulePeriodicSync(this);
         }
     }

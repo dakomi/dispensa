@@ -220,6 +220,10 @@
     <string name="pref_sync_last_timestamp_never">Never</string>
     <string name="pref_sync_trigger_manual_title">Sync now</string>
     <string name="pref_sync_trigger_manual_summary">Trigger an immediate sync with nearby devices</string>
+    <string name="pref_sync_trigger_manual_summary_local">Sync with nearby devices on the local network</string>
+    <string name="pref_sync_trigger_manual_summary_drive">Sync with Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_both">Sync with nearby devices and Google Drive</string>
+    <string name="pref_sync_trigger_manual_summary_none">Enable local network or Google Drive sync first</string>
     <string name="pref_sync_drive_title">Google Drive sync</string>
     <string name="pref_sync_drive_summary">Back up and sync your pantry via Google Drive</string>
     <string name="pref_sync_drive_account_title">Google account</string>

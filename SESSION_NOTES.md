@@ -28,6 +28,7 @@
   - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1279–1345)*
   - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1347–1390)*
 - [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1382–1450)*
+- [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1420–1490)*
 
 ---
 
@@ -1405,7 +1406,7 @@ _(Updated by Session 16.2: confirmed the existing `-dontwarn javax.naming.**` / 
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
 
-### Handoff to Session 18
+### Handoff to Session 19
 
 - Both bugs are fixed. After this change:
   - `testDriveConnection` after `createHousehold` will correctly use the household transport (log line: `create: returning household transport, folderId=… deviceId=…`).
@@ -1416,3 +1417,60 @@ _(Updated by Session 16.2: confirmed the existing `-dontwarn javax.naming.**` / 
   - Household folder friendly name in status preference.
   - Notification/badge when new pending sync devices arrive.
 
+---
+
+## Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button
+
+**Date:** 2026-04-29
+**Goal:** Fix the root cause of empty household folder (SyncWorker never scheduled for Drive-only users); add sync-on-change after pantry mutations; add context-aware manual sync button.
+
+### What was done
+
+**Root Cause Analysis**
+
+From the provided logs, `GoogleDriveSyncTransport.pull` was called successfully (bytes=0) from `testDriveConnection`, but there was never a single `SyncWorker: doWork` or `push: starting` log entry — even after waiting overnight. The periodic sync job was simply never enqueued.
+
+Root cause: `Dispensa.scheduleSyncIfEnabled()` only checked `sync_local_network_enabled`. For a Drive-only user (local network disabled, Drive enabled) the WorkManager job was never scheduled, so data was never pushed to the household folder.
+
+Secondary bug: `SettingsFragment.onSharedPreferenceChanged()` for the `sync_drive_enabled` toggle called `SyncSettingsHelper.onDriveEnabledChanged()` but never touched `SyncWorkerScheduler`, so enabling Drive from settings also left the scheduler unstarted.
+
+**Bug Fixes**
+
+- `Dispensa.scheduleSyncIfEnabled()` — now schedules periodic sync when EITHER `sync_local_network_enabled` OR `sync_drive_enabled` is true.
+- `SettingsFragment.onSharedPreferenceChanged()`:
+  - `sync_drive_enabled` true → `schedulePeriodicSync()`; false + local also off → `cancelPeriodicSync()`.
+  - `sync_local_network_enabled` false + Drive also off → `cancelPeriodicSync()` (was unconditional cancel, which would stop Drive sync too).
+
+**Feature 1: Sync after each pantry item add/edit/remove**
+
+- Stored `Application` reference in `Repository` constructor.
+- Added `SyncWorkerScheduler.triggerManualSync(application)` at the end of the `databaseWriteExecutor` lambda in `insert`, `delete`, `update`, `insertProductWithApiTags`, and `updateProductWithApiTags`. Uses `ExistingWorkPolicy.REPLACE` debouncing — rapid changes coalesce into a single sync run.
+
+**Feature 2: Context-aware "Sync now" button**
+
+- Added `updateManualSyncSummary()` to `SettingsFragment` — reads both `sync_local_network_enabled` and `sync_drive_enabled`, sets the `sync_trigger_manual` preference summary to one of four states: local-only / Drive-only / both / none.
+- Button is disabled when no sync mode is enabled.
+- Called from `onCreatePreferences`, `onResume`, and `onSharedPreferenceChanged` (both sync keys).
+- Added 4 new string resources in `values/strings.xml` and `values-it/strings.xml`.
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/Dispensa.java` — `scheduleSyncIfEnabled()` also checks `sync_drive_enabled`
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — scheduler start/stop wired for Drive toggle; `updateManualSyncSummary()` added
+- `app/src/main/java/eu/frigo/dispensa/data/Repository.java` — stores `Application`; triggers `triggerManualSync` after product mutations
+- `app/src/main/res/values/strings.xml` — 4 new `pref_sync_trigger_manual_summary_*` strings
+- `app/src/main/res/values-it/strings.xml` — Italian translations of the 4 new strings
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 19
+
+- All three issues are resolved. The user should update the app and add a pantry item — they should see a `SyncWorker: doWork` log entry followed by a `push: starting` log within seconds.
+- **Outstanding polish items** (carried forward):
+  - Copy-to-clipboard button in the household deep-link dialog.
+  - QR code generation for the join link.
+  - Household folder friendly name in status preference.
+  - Notification/badge when new pending sync devices arrive.
