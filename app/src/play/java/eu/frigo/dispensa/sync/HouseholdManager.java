@@ -62,6 +62,9 @@ public class HouseholdManager {
     /** SharedPreferences key for the stored household folder ID. */
     public static final String PREF_HOUSEHOLD_FOLDER_ID = "sync_drive_household_folder_id";
 
+    /** SharedPreferences key for the stored household folder display name. */
+    public static final String PREF_HOUSEHOLD_FOLDER_NAME = "sync_drive_household_folder_name";
+
     /** Display name of the shared Drive folder created by the host. */
     static final String FOLDER_NAME = "Dispensa Household";
 
@@ -99,6 +102,25 @@ public class HouseholdManager {
         PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
                 .remove(PREF_HOUSEHOLD_FOLDER_ID)
+                .remove(PREF_HOUSEHOLD_FOLDER_NAME)
+                .apply();
+    }
+
+    /**
+     * Returns the stored household folder display name, or {@code null} if unknown.
+     */
+    public static String getHouseholdFolderName(Context context) {
+        return PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(PREF_HOUSEHOLD_FOLDER_NAME, null);
+    }
+
+    /**
+     * Persists the household folder display name in SharedPreferences.
+     */
+    static void setHouseholdFolderName(Context context, String name) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putString(PREF_HOUSEHOLD_FOLDER_NAME, name)
                 .apply();
     }
 
@@ -148,6 +170,7 @@ public class HouseholdManager {
                 .execute();
         String folderId = created.getId();
         setHouseholdFolderId(context, folderId);
+        setHouseholdFolderName(context, FOLDER_NAME);
         DebugLogger.i(TAG, "createHousehold: folder created, id=" + folderId);
         Log.d(TAG, "Household folder created: " + folderId);
         return folderId;
@@ -203,6 +226,7 @@ public class HouseholdManager {
                 return false;
             }
             setHouseholdFolderId(context, folderId);
+            setHouseholdFolderName(context, folder.getName() != null ? folder.getName() : folderId);
             DebugLogger.i(TAG, "verifyAndJoin: joined household folder '"
                     + folder.getName() + "' id=" + folderId);
             Log.d(TAG, "Joined household folder: " + folderId

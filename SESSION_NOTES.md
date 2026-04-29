@@ -28,7 +28,8 @@
   - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1279–1345)*
   - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1347–1390)*
 - [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1382–1450)*
-- [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1420–1490)*
+- [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1422–1490)* ↳ has sub-sessions
+  - [Session 18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) *(~1490–1570)*
 
 ---
 
@@ -1469,8 +1470,65 @@ Secondary bug: `SettingsFragment.onSharedPreferenceChanged()` for the `sync_driv
 ### Handoff to Session 19
 
 - All three issues are resolved. The user should update the app and add a pantry item — they should see a `SyncWorker: doWork` log entry followed by a `push: starting` log within seconds.
-- **Outstanding polish items** (carried forward):
-  - Copy-to-clipboard button in the household deep-link dialog.
-  - QR code generation for the join link.
-  - Household folder friendly name in status preference.
-  - Notification/badge when new pending sync devices arrive.
+- All four polish items from the session 17 backlog are now complete (see Session 18.1 below).
+
+---
+
+## Session 18.1 — Household polish: copy button, QR, folder name, device notification
+
+_(Continuation of Session 18)_
+
+**Date:** 2026-04-29
+**Goal:** Implement all four outstanding polish items from the Session 17 handoff.
+
+### What was done
+
+**Item 1: Copy-to-clipboard button in the household deep-link dialog**
+- Replaced the plain "OK" dismiss button with a "Copy link" positive button that writes the invite link to the system clipboard and shows a brief toast confirmation.
+- Added a "Close" (cancel) button to dismiss without copying.
+- New strings: `dialog_household_link_copy`, `dialog_household_link_copied` (EN + IT).
+
+**Item 2: QR code generation for the join link**
+- Added `com.google.zxing:core:3.5.3` as a `playImplementation` dependency (pure Java QR encoder, no UI wrapper needed).
+- The deep-link dialog now shows a 240dp QR code image above the text field, generated inline using `QRCodeWriter`. If encoding fails for any reason the image is hidden and the text link is still shown.
+
+**Item 3: Household folder friendly name in status preference**
+- Added `PREF_HOUSEHOLD_FOLDER_NAME` to `HouseholdManager` (stored alongside `PREF_HOUSEHOLD_FOLDER_ID`).
+- `createHousehold()` now stores `FOLDER_NAME` ("Dispensa Household") when the folder is created.
+- `verifyAndJoin()` now stores the actual Drive folder name fetched via `files().get()`.
+- `clearHouseholdFolderId()` now also clears the stored name.
+- `refreshSignInState()` in `SyncSettingsHelper` now shows the folder name (falls back to ID if missing).
+
+**Item 4: Notification when a new pending sync device arrives**
+- Added `CHANNEL_ID_SYNC_DEVICE = "SYNC_DEVICE_CHANNEL"` constant to `LocalNetworkSyncTransport`.
+- `Dispensa.createNotificationChannel()` now also creates the sync-device channel.
+- `handleIncomingConnection()` checks if the untrusted device is already in the pending set; if newly added, `postPendingDeviceNotification()` fires a notification that opens `SettingsActivity` on tap.
+- Repeating connection attempts from the same device do not re-trigger the notification.
+- New strings: `sync_device_notification_channel_name`, `notify_sync_device_pending_title`, `notify_sync_device_pending_text` (EN + IT).
+
+### Files changed
+
+- `gradle/libs.versions.toml` — added `zxingCore = "3.5.3"` version + `zxing-core` library entry
+- `app/build.gradle.kts` — added `playImplementation(libs.zxing.core)`
+- `app/src/play/java/eu/frigo/dispensa/sync/HouseholdManager.java` — `PREF_HOUSEHOLD_FOLDER_NAME`, `getHouseholdFolderName`, `setHouseholdFolderName`; store name in `createHousehold`/`verifyAndJoin`; clear in `clearHouseholdFolderId`
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — copy button + QR in dialog; `householdDisplayName()` helper; updated `refreshSignInState` to use name
+- `app/src/main/java/eu/frigo/dispensa/sync/LocalNetworkSyncTransport.java` — store `context` in instance; `CHANNEL_ID_SYNC_DEVICE`; `postPendingDeviceNotification()`; only-new-device check before posting
+- `app/src/main/java/eu/frigo/dispensa/Dispensa.java` — create sync-device notification channel
+- `app/src/main/res/values/strings.xml` — 5 new strings
+- `app/src/main/res/values-it/strings.xml` — 5 new strings (Italian)
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 19
+
+- All polish items are complete. Session 18 PR (branch `copilot/troubleshoot-empty-household-folder`) contains:
+  - Root-cause fix for empty household folder (Drive-only scheduler bug)
+  - Sync-on-change after pantry mutations
+  - Context-aware "Sync now" button
+  - Household deep-link dialog: copy button + QR code
+  - Household folder name in status preference
+  - Notification on new pending sync device
+- No known remaining blockers.

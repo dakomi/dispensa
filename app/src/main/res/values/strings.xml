@@ -283,6 +283,8 @@
     <string name="dialog_leave_household_ok">Leave</string>
     <string name="dialog_household_link_title">Share this link</string>
     <string name="dialog_household_link_message">Copy and share this invite link with household members. They can paste it into Dispensa to join.</string>
+    <string name="dialog_household_link_copy">Copy link</string>
+    <string name="dialog_household_link_copied">Invite link copied to clipboard</string>
     <string name="hint_household_emails">e.g. alice@gmail.com, bob@gmail.com</string>
     <string name="hint_household_folder_id">Paste invite link or folder ID</string>
     <string name="notify_household_joined">Joined household ✓</string>
@@ -290,6 +292,11 @@
     <string name="err_household_create">Failed to create household: %1$s</string>
     <string name="err_household_join">Failed to join household: %1$s</string>
     <string name="err_household_join_not_found">Household not found. Check the folder ID and make sure you were invited.</string>
+
+    <!-- Sync device approval notifications -->
+    <string name="sync_device_notification_channel_name">Sync device requests</string>
+    <string name="notify_sync_device_pending_title">New sync device request</string>
+    <string name="notify_sync_device_pending_text">A device wants to sync with Dispensa. Tap to review.</string>
 
     <!-- Consume Scanner -->
     <string name="consume_product_not_found">No product found for this barcode</string>

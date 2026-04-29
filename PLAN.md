@@ -382,5 +382,8 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Feature: trigger `SyncWorkerScheduler.triggerManualSync()` after every product insert/delete/update in `Repository.java` (covers `insert`, `delete`, `update`, `insertProductWithApiTags`, `updateProductWithApiTags`)
 - [x] Feature: context-aware "Sync now" button — `updateManualSyncSummary()` sets the summary to reflect active sync modes (local / Drive / both / none); button is disabled when no sync is enabled
 - [x] Add 4 new string resources (en + it): `pref_sync_trigger_manual_summary_local/drive/both/none`
+- [x] Household deep-link dialog: copy-to-clipboard button + QR code (ZXing core 3.5.3 play dep)
+- [x] Household folder friendly name stored in SharedPreferences and shown in status preference
+- [x] Notification when a new untrusted device is first added to pending list
 
 **Tests:** Both flavors BUILD SUCCESSFUL; all 26 unit tests pass.

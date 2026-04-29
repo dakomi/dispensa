@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 
 import androidx.preference.PreferenceManager;
 
+import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
 import eu.frigo.dispensa.util.DebugLogger;
 import eu.frigo.dispensa.util.ThemeHelper;
 import eu.frigo.dispensa.work.ExpiryCheckWorker;
@@ -37,13 +38,21 @@ public class Dispensa extends Application {
     }
 
     private void createNotificationChannel() {
-        CharSequence name = getString(R.string.expiry_notification_channel_name);
-        int importance = NotificationManager.IMPORTANCE_DEFAULT;
-        NotificationChannel channel = new NotificationChannel(ExpiryCheckWorker.CHANNEL_ID, name, importance);
-
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
-        if (notificationManager != null) {
-            notificationManager.createNotificationChannel(channel);
-        }
+        if (notificationManager == null) return;
+
+        // Expiry notification channel
+        NotificationChannel expiryChannel = new NotificationChannel(
+                ExpiryCheckWorker.CHANNEL_ID,
+                getString(R.string.expiry_notification_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT);
+        notificationManager.createNotificationChannel(expiryChannel);
+
+        // Sync device approval request notification channel
+        NotificationChannel syncDeviceChannel = new NotificationChannel(
+                LocalNetworkSyncTransport.CHANNEL_ID_SYNC_DEVICE,
+                getString(R.string.sync_device_notification_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT);
+        notificationManager.createNotificationChannel(syncDeviceChannel);
     }
 }
