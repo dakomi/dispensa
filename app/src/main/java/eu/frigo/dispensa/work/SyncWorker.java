@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import eu.frigo.dispensa.R;
 import eu.frigo.dispensa.data.AppDatabase;
 import eu.frigo.dispensa.sync.DriveTransportFactory;
 import eu.frigo.dispensa.sync.LocalNetworkSyncTransport;
@@ -48,6 +49,18 @@ public class SyncWorker extends Worker {
     public static final String TAG_MANUAL = "MANUAL_SYNC";
 
     /**
+     * SharedPreferences key where the last-sync epoch-millis is stored.
+     * Written by {@link #doWork()} after each successful sync cycle.
+     */
+    public static final String PREFS_KEY_LAST_SYNC_EPOCH = "sync_last_epoch_ms";
+
+    /**
+     * SharedPreferences key for the current sync-status string displayed in Settings.
+     * Non-empty while a sync is in progress; cleared (empty string) when idle.
+     */
+    public static final String PREFS_KEY_SYNC_STATUS = "sync_status_message";
+
+    /**
      * How long (in ms) the worker waits after starting NSD discovery before attempting to
      * connect to a peer.  This gives the mDNS responder time to locate peers.
      */
@@ -58,6 +71,14 @@ public class SyncWorker extends Worker {
 
     public SyncWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
+    }
+
+    /** Writes {@code status} to SharedPreferences so the Settings UI can display it. */
+    private static void setSyncStatus(Context ctx, String status) {
+        PreferenceManager.getDefaultSharedPreferences(ctx)
+                .edit()
+                .putString(PREFS_KEY_SYNC_STATUS, status)
+                .apply();
     }
 
     @NonNull
@@ -74,6 +95,7 @@ public class SyncWorker extends Worker {
             DebugLogger.i(TAG, "doWork: local network sync is disabled — skipping");
             Log.d(TAG, "Local network sync is disabled — skipping.");
         } else {
+            setSyncStatus(ctx, ctx.getString(R.string.sync_status_local_syncing));
             LocalNetworkSyncTransport transport = new LocalNetworkSyncTransport(ctx, syncManager);
             DebugLogger.i(TAG, "doWork: starting local network sync");
             try {
@@ -131,11 +153,13 @@ public class SyncWorker extends Worker {
             } catch (IOException e) {
                 DebugLogger.e(TAG, "doWork: sync transport error", e);
                 Log.e(TAG, "Sync transport error", e);
+                setSyncStatus(ctx, "");
                 return Result.failure();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 DebugLogger.w(TAG, "doWork: sync worker interrupted");
                 Log.w(TAG, "Sync worker interrupted");
+                setSyncStatus(ctx, "");
                 return Result.failure();
             } finally {
                 transport.stop();
@@ -150,6 +174,7 @@ public class SyncWorker extends Worker {
             SyncTransport driveTransport = DriveTransportFactory.create(ctx, syncManager);
             if (driveTransport != null) {
                 DebugLogger.i(TAG, "doWork: Drive transport available, starting Drive sync");
+                setSyncStatus(ctx, ctx.getString(R.string.sync_status_drive_syncing));
                 // Always export the full change log (clock > 0) for Drive.
                 // Drive acts as a canonical snapshot store: any device — including one that
                 // has never done a local-network sync — must be able to bootstrap from it.
@@ -201,12 +226,22 @@ public class SyncWorker extends Worker {
             Thread.currentThread().interrupt();
             DebugLogger.w(TAG, "doWork: Drive sync interrupted");
             Log.w(TAG, "Drive sync interrupted");
+            setSyncStatus(ctx, "");
             return Result.failure();
         } catch (RuntimeException e) {
             DebugLogger.e(TAG, "doWork: unexpected Drive sync error", e);
             Log.e(TAG, "Unexpected Drive sync error", e);
+            setSyncStatus(ctx, "");
             return Result.failure();
         }
+
+        // Persist last-sync timestamp and clear the in-progress status so the
+        // Settings UI shows the completion time rather than a stale "syncing" message.
+        PreferenceManager.getDefaultSharedPreferences(ctx)
+                .edit()
+                .putLong(PREFS_KEY_LAST_SYNC_EPOCH, System.currentTimeMillis())
+                .putString(PREFS_KEY_SYNC_STATUS, "")
+                .apply();
 
         DebugLogger.i(TAG, "doWork: sync cycle complete — returning success");
         return Result.success();

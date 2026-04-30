@@ -293,6 +293,18 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="err_household_join">Accesso al nucleo familiare non riuscito: %1$s</string>
     <string name="err_household_join_not_found">Nucleo familiare non trovato. Controlla l\'ID cartella e assicurati di essere stato invitato.</string>
 
+    <!-- Invite household member -->
+    <string name="dialog_household_link_invite">Invita tramite email</string>
+    <string name="dialog_invite_by_email_title">Invita membro del nucleo familiare</string>
+    <string name="dialog_invite_by_email_message">Inserisci l\'email dell\'account Google per concedergli l\'accesso alla cartella condivisa. Dopo aver concesso l\'accesso, condividi il link di invito con loro.</string>
+    <string name="hint_household_invite_email">es. alice@gmail.com</string>
+    <string name="notify_household_invite_sent">Invito inviato a %1$s</string>
+    <string name="err_household_invite">Impossibile invitare %1$s: %2$s</string>
+
+    <!-- Live sync status -->
+    <string name="sync_status_local_syncing">Sincronizzazione con dispositivi locali…</string>
+    <string name="sync_status_drive_syncing">Sincronizzazione con Google Drive…</string>
+
     <!-- Sync device approval notifications -->
     <string name="sync_device_notification_channel_name">Richieste di sincronizzazione</string>
     <string name="notify_sync_device_pending_title">Nuova richiesta di sincronizzazione</string>

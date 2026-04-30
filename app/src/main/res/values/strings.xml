@@ -293,6 +293,18 @@
     <string name="err_household_join">Failed to join household: %1$s</string>
     <string name="err_household_join_not_found">Household not found. Check the folder ID and make sure you were invited.</string>
 
+    <!-- Invite household member -->
+    <string name="dialog_household_link_invite">Invite by email</string>
+    <string name="dialog_invite_by_email_title">Invite household member</string>
+    <string name="dialog_invite_by_email_message">Enter the Google account email to grant them access to the shared household folder. After granting access, share the invite link with them.</string>
+    <string name="hint_household_invite_email">e.g. alice@gmail.com</string>
+    <string name="notify_household_invite_sent">Invitation sent to %1$s</string>
+    <string name="err_household_invite">Failed to invite %1$s: %2$s</string>
+
+    <!-- Live sync status -->
+    <string name="sync_status_local_syncing">Syncing with local devices…</string>
+    <string name="sync_status_drive_syncing">Syncing with Google Drive…</string>
+
     <!-- Sync device approval notifications -->
     <string name="sync_device_notification_channel_name">Sync device requests</string>
     <string name="notify_sync_device_pending_title">New sync device request</string>
