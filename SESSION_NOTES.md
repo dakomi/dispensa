@@ -1588,15 +1588,6 @@ _(Continuation of Session 18 / 18.1)_
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
 
-### Handoff to Session 20
-
-_(Updated by Session 18.2)_
-
-- Household status is now tappable in the Settings UI to re-share the invite link.
-- The "Invite by email" flow grants Drive access then shows a toast; guests (non-owners) will receive an error toast from `grantAccess()` (HTTP 403) — this is expected behaviour.
-- `sync_last_epoch_ms` is now written after every successful sync — "Last sync" will no longer permanently show "Never" once sync has run.
-- Percentage-based upload/download progress is not yet implemented (requires `SyncTransport` interface changes).
-
 ---
 
 ## Session 19 — Fresh-Install sync_changes Missing Table
@@ -1634,6 +1625,12 @@ Added a `catch (RuntimeException e)` block to the Drive sync section that logs t
 
 ### Handoff to Session 20
 
+_(Updated by Session 18.2: household status is now interactive, an email-invite flow was added to the deep-link dialog, missing folder names are fetched from Drive in the background, and live sync status is shown in the Last Sync preference. See Session 18.2 for details.)_
+
 - Fresh-install users will now have `sync_changes` and all triggers created immediately when Room opens the database for the first time. Subsequent `SyncWorker` runs will find the table and upload pantry data to Drive.
 - Existing users whose DB was created via MIGRATION_9_10 are unaffected — the `IF NOT EXISTS` guard makes the `onCreate` call a no-op for them.
 - No known remaining blockers for core sync functionality.
+- Household status preference is tappable; tapping it re-shows the QR/deep-link dialog so the host can invite more members at any time.
+- The "Invite by email" button in the deep-link dialog calls `HouseholdManager.grantAccess()` on a background thread; guests who are not the folder owner will get an HTTP 403 error Toast (expected behaviour).
+- `sync_last_epoch_ms` is now written after every successful sync — "Last sync" will no longer permanently show "Never" once sync has run.
+- Percentage-based upload/download progress is not yet implemented (requires `SyncTransport` interface changes).
