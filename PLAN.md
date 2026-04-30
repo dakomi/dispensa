@@ -387,3 +387,20 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Notification when a new untrusted device is first added to pending list
 
 **Tests:** Both flavors BUILD SUCCESSFUL; all 26 unit tests pass.
+
+---
+
+### Session 18.2 — Household status interactive + invite flow + live sync status
+
+**Goal:** Make household status tappable (re-show invite dialog), add "Invite by email" flow, fix missing folder name for pre-18.1 users, and show live sync progress on the Last Sync preference.
+
+- [x] `preferences_sync_drive.xml`: remove `selectable="false"` from `sync_drive_household_status`
+- [x] `SyncSettingsHelper.setup()`: add click listener on household status pref → shows deep-link dialog when in household
+- [x] `SyncSettingsHelper.showDeepLinkDialog()`: changed signature to accept `PreferenceFragmentCompat`; added neutral "Invite by email" button; new `showInviteByEmailDialog()` + `inviteHouseholdMember()` methods
+- [x] `SyncSettingsHelper.fetchAndStoreFolderName()`: background Drive fetch when folder name is null; re-calls `refreshSignInState()` on main thread after storing
+- [x] `SyncWorker`: added `PREFS_KEY_SYNC_STATUS` + `PREFS_KEY_LAST_SYNC_EPOCH` constants; `setSyncStatus()` helper; status writes in `doWork()`; epoch timestamp persisted on success
+- [x] `SettingsFragment.updateLastSyncSummary()`: shows live status when present; falls back to timestamp/Never
+- [x] `SettingsFragment.onSharedPreferenceChanged()`: reacts to sync status + epoch keys
+- [x] 8 new EN + IT string resources (invite dialog + sync status messages)
+
+**Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.

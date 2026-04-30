@@ -164,6 +164,7 @@ public class SyncWorker extends Worker {
             } finally {
                 transport.stop();
                 DebugLogger.i(TAG, "doWork: transport stopped");
+                setSyncStatus(ctx, "");  // clear local-sync status before Drive block
             }
         }
 
