@@ -117,7 +117,7 @@ public class HouseholdManager {
     /**
      * Persists the household folder display name in SharedPreferences.
      */
-    static void setHouseholdFolderName(Context context, String name) {
+    public static void setHouseholdFolderName(Context context, String name) {
         PreferenceManager.getDefaultSharedPreferences(context)
                 .edit()
                 .putString(PREF_HOUSEHOLD_FOLDER_NAME, name)
