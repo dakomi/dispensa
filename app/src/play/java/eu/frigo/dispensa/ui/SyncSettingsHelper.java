@@ -154,6 +154,14 @@ public class SyncSettingsHelper {
         if (householdStatusPref != null) {
             rootScreen.removePreference(householdStatusPref);
             syncCategory.addPreference(householdStatusPref);
+            householdStatusPref.setOnPreferenceClickListener(pref -> {
+                String folderId = HouseholdManager.getHouseholdFolderId(fragment.requireContext());
+                if (folderId != null) {
+                    String deepLink = HouseholdManager.generateJoinDeepLink(folderId);
+                    showDeepLinkDialog(fragment, deepLink);
+                }
+                return true;
+            });
         }
 
         Preference createHouseholdPref = rootScreen.findPreference(KEY_CREATE_HOUSEHOLD);
@@ -314,6 +322,11 @@ public class SyncSettingsHelper {
                         ? context.getString(R.string.pref_sync_drive_household_status_active,
                                 householdDisplayName(context))
                         : context.getString(R.string.pref_sync_drive_household_status_solo));
+            }
+            // If in household but folder name not yet stored, fetch it from Drive in the background
+            if (inHousehold && HouseholdManager.getHouseholdFolderName(context) == null) {
+                String folderId = HouseholdManager.getHouseholdFolderId(context);
+                fetchAndStoreFolderName(fragment, folderId);
             }
         }
         if (createHouseholdPref != null) createHouseholdPref.setVisible(signedIn && !inHousehold);
@@ -496,8 +509,8 @@ public class SyncSettingsHelper {
                     try {
                         if (fragment.isAdded()) {
                             refreshSignInState(fragment);
+                            showDeepLinkDialog(fragment, deepLink);
                         }
-                        showDeepLinkDialog(context, deepLink);
                     } catch (Exception dialogEx) {
                         DebugLogger.e(TAG, "createHousehold: could not show link dialog", dialogEx);
                     }
@@ -591,7 +604,11 @@ public class SyncSettingsHelper {
                 .show();
     }
 
-    private static void showDeepLinkDialog(Context context, String deepLink) {
+    private static void showDeepLinkDialog(PreferenceFragmentCompat fragment, String deepLink) {
+        if (!fragment.isAdded()) return;
+        Context context = fragment.requireContext();
+        String folderId = extractFolderIdFromInput(deepLink);
+
         // Build a vertical layout: QR code image + read-only link text
         LinearLayout dialogView = new LinearLayout(context);
         dialogView.setOrientation(LinearLayout.VERTICAL);
@@ -633,8 +650,109 @@ public class SyncSettingsHelper {
                             context.getString(R.string.dialog_household_link_copied),
                             Toast.LENGTH_SHORT).show();
                 })
+                .setNeutralButton(R.string.dialog_household_link_invite, (dlg, which) -> {
+                    if (folderId != null) {
+                        showInviteByEmailDialog(fragment, folderId);
+                    }
+                })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private static void showInviteByEmailDialog(PreferenceFragmentCompat fragment, String folderId) {
+        if (!fragment.isAdded()) return;
+        Context context = fragment.requireContext();
+
+        EditText emailInput = new EditText(context);
+        emailInput.setHint(context.getString(R.string.hint_household_invite_email));
+        emailInput.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+
+        new AlertDialog.Builder(context)
+                .setTitle(R.string.dialog_invite_by_email_title)
+                .setMessage(R.string.dialog_invite_by_email_message)
+                .setView(emailInput)
+                .setPositiveButton(R.string.dialog_household_link_invite, (dlg, which) -> {
+                    String email = emailInput.getText().toString().trim();
+                    if (!email.isEmpty()) {
+                        inviteHouseholdMember(fragment, folderId, email);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private static void inviteHouseholdMember(PreferenceFragmentCompat fragment,
+            String folderId, String email) {
+        Context context = fragment.requireContext();
+        String signedInEmail = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+        if (signedInEmail == null || signedInEmail.isEmpty()) {
+            Toast.makeText(context,
+                    context.getString(R.string.notify_sync_drive_test_not_signed_in),
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        DebugLogger.i(TAG, "inviteHouseholdMember: inviting " + email + " to folderId=" + folderId);
+        Account account = new Account(signedInEmail, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
+        Drive drive = HouseholdManager.buildDrive(context, account);
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            try {
+                HouseholdManager.grantAccess(drive, folderId, email);
+                DebugLogger.i(TAG, "inviteHouseholdMember: granted access to " + email);
+                mainHandler.post(() -> Toast.makeText(context,
+                        context.getString(R.string.notify_household_invite_sent, email),
+                        Toast.LENGTH_SHORT).show());
+            } catch (Throwable e) {
+                DebugLogger.e(TAG, "inviteHouseholdMember: failed for " + email, e);
+                String msg = context.getString(R.string.err_household_invite, email, messageOf(e));
+                mainHandler.post(() ->
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show());
+            }
+        });
+        executor.shutdown();
+    }
+
+    /**
+     * Fetches the household folder name from Drive in the background and stores it in
+     * SharedPreferences.  Called when the folder ID is known but the display name is not
+     * yet cached (e.g. users who joined before Session 18.1).
+     */
+    private static void fetchAndStoreFolderName(PreferenceFragmentCompat fragment,
+            String folderId) {
+        if (folderId == null) return;
+        Context context = fragment.requireContext();
+        String signedInEmail = PreferenceManager
+                .getDefaultSharedPreferences(context)
+                .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
+        if (signedInEmail == null || signedInEmail.isEmpty()) return;
+
+        DebugLogger.i(TAG, "fetchAndStoreFolderName: fetching name for folderId=" + folderId);
+        Account account = new Account(signedInEmail, DriveTransportFactory.GOOGLE_ACCOUNT_TYPE);
+        Drive drive = HouseholdManager.buildDrive(context, account);
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        java.util.concurrent.ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.execute(() -> {
+            try {
+                com.google.api.services.drive.model.File folder = drive.files().get(folderId)
+                        .setFields("id,name")
+                        .execute();
+                if (folder != null && folder.getName() != null) {
+                    HouseholdManager.setHouseholdFolderName(context, folder.getName());
+                    DebugLogger.i(TAG, "fetchAndStoreFolderName: stored name='" + folder.getName() + "'");
+                    mainHandler.post(() -> {
+                        if (fragment.isAdded()) refreshSignInState(fragment);
+                    });
+                }
+            } catch (Exception e) {
+                DebugLogger.w(TAG, "fetchAndStoreFolderName: could not fetch folder name: "
+                        + e.getMessage());
+            }
+        });
+        executor.shutdown();
     }
 
     /**

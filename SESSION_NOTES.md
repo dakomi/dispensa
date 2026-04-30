@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1580-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1650-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~37–117)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~118–174)*
@@ -30,7 +30,8 @@
 - [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1386–1423)*
 - [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1424–1477)* ↳ has sub-sessions
   - [Session 18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) *(~1478–1538)*
-- [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1539–1580)*
+  - [Session 18.2 — Household status interactive + invite flow + live sync status](#session-182--household-status-interactive--invite-flow--live-sync-status) *(~1539–1600)*
+- [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)*
 
 ---
 
@@ -1423,6 +1424,8 @@ _(Updated by Session 16.2: confirmed the existing `-dontwarn javax.naming.**` / 
 
 ## Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button
 
+> **Sub-sessions:** [18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) · [18.2 — Household status interactive + invite flow + live sync status](#session-182--household-status-interactive--invite-flow--live-sync-status)
+
 **Date:** 2026-04-29
 **Goal:** Fix the root cause of empty household folder (SyncWorker never scheduled for Drive-only users); add sync-on-change after pantry mutations; add context-aware manual sync button.
 
@@ -1536,6 +1539,57 @@ _(Continuation of Session 18)_
 
 ---
 
+## Session 18.2 — Household status interactive + invite flow + live sync status
+
+_(Continuation of Session 18 / 18.1)_
+
+**Date:** 2026-04-30
+**Goal:** Make the Household Status preference interactive (tap → deep-link dialog), add an "Invite by email" flow that also grants Drive folder access, fix the folder name not showing for pre-18.1 users, and make the Last Sync preference show live sync progress.
+
+### What was done
+
+**Item 1: Household Status preference — now tappable**
+- Removed `app:selectable="false"` from `sync_drive_household_status` in `preferences_sync_drive.xml`.
+- Added a click listener in `SyncSettingsHelper.setup()`: when the status is tapped while a household is active, the deep-link/QR dialog is shown immediately (so the host can re-invite members at any time without needing to create a new household).
+
+**Item 2: "Invite by email" button in the deep-link dialog**
+- `showDeepLinkDialog(Context, String)` replaced with `showDeepLinkDialog(PreferenceFragmentCompat, String)` so the fragment context is available for follow-up dialogs and Drive API calls.
+- Added a neutral "Invite by email" button to the dialog (alongside "Copy link" and "Close").
+- Tapping "Invite by email" shows `showInviteByEmailDialog()` with an email input field.
+- On confirm, `inviteHouseholdMember()` calls `HouseholdManager.grantAccess()` on a background thread then shows a Toast. Errors (e.g. guest without share permission) are surfaced via a long Toast.
+
+**Item 3: Household folder name not showing — background fetch**
+- `refreshSignInState()` now calls `fetchAndStoreFolderName(fragment, folderId)` whenever the device is in a household but `PREF_HOUSEHOLD_FOLDER_NAME` is null (covers users who created or joined a household before Session 18.1).
+- `fetchAndStoreFolderName()` runs a Drive `files().get(folderId)` call on a background thread, stores the name, and posts a `refreshSignInState()` call on the main thread to update the UI.
+
+**Item 4: Live sync status on the Last Sync preference**
+- Added `PREFS_KEY_SYNC_STATUS = "sync_status_message"` and `PREFS_KEY_LAST_SYNC_EPOCH = "sync_last_epoch_ms"` as public constants in `SyncWorker`.
+- `SyncWorker.doWork()` now writes status strings at key points:
+  - Before local-network sync: `sync_status_local_syncing` ("Syncing with local devices…")
+  - Clears status in the local-sync `finally` block before entering the Drive section
+  - Before Drive sync: `sync_status_drive_syncing` ("Syncing with Google Drive…")
+  - On each failure path: clears status before returning `Result.failure()`
+  - On success: writes `System.currentTimeMillis()` to `sync_last_epoch_ms` and clears `sync_status_message`
+- `SettingsFragment.updateLastSyncSummary()` now checks `PREFS_KEY_SYNC_STATUS` first; if non-empty it shows the live status message, otherwise falls back to the formatted timestamp or "Never".
+- `SettingsFragment.onSharedPreferenceChanged()` now reacts to changes of `PREFS_KEY_SYNC_STATUS` and `PREFS_KEY_LAST_SYNC_EPOCH` to call `updateLastSyncSummary()`.
+- Note: per-step upload/download percentage (%) would require extending `SyncTransport` with progress callbacks; out of scope for this session.
+
+### Files changed
+
+- `app/src/play/res/xml/preferences_sync_drive.xml` — removed `selectable="false"` from `sync_drive_household_status`
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — household status click listener; `showDeepLinkDialog(fragment, deepLink)`; `showInviteByEmailDialog()`; `inviteHouseholdMember()`; `fetchAndStoreFolderName()`; updated `refreshSignInState()` to trigger name fetch; updated `createHousehold()` call site
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — `PREFS_KEY_SYNC_STATUS`, `PREFS_KEY_LAST_SYNC_EPOCH` constants; `setSyncStatus()` helper; status writes + epoch write in `doWork()`; `R` import added
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — `PREFS_KEY_LAST_SYNC_EPOCH` references `SyncWorker.PREFS_KEY_LAST_SYNC_EPOCH`; `updateLastSyncSummary()` shows live status; `onSharedPreferenceChanged()` handles status/epoch keys
+- `app/src/main/res/values/strings.xml` — 8 new strings (invite dialog + sync status)
+- `app/src/main/res/values-it/strings.xml` — 8 new Italian translations
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+---
+
 ## Session 19 — Fresh-Install sync_changes Missing Table
 
 **Date:** 2026-04-30
@@ -1571,6 +1625,12 @@ Added a `catch (RuntimeException e)` block to the Drive sync section that logs t
 
 ### Handoff to Session 20
 
+_(Updated by Session 18.2: household status is now interactive, an email-invite flow was added to the deep-link dialog, missing folder names are fetched from Drive in the background, and live sync status is shown in the Last Sync preference. See Session 18.2 for details.)_
+
 - Fresh-install users will now have `sync_changes` and all triggers created immediately when Room opens the database for the first time. Subsequent `SyncWorker` runs will find the table and upload pantry data to Drive.
 - Existing users whose DB was created via MIGRATION_9_10 are unaffected — the `IF NOT EXISTS` guard makes the `onCreate` call a no-op for them.
 - No known remaining blockers for core sync functionality.
+- Household status preference is tappable; tapping it re-shows the QR/deep-link dialog so the host can invite more members at any time.
+- The "Invite by email" button in the deep-link dialog calls `HouseholdManager.grantAccess()` on a background thread; guests who are not the folder owner will get an HTTP 403 error Toast (expected behaviour).
+- `sync_last_epoch_ms` is now written after every successful sync — "Last sync" will no longer permanently show "Never" once sync has run.
+- Percentage-based upload/download progress is not yet implemented (requires `SyncTransport` interface changes).

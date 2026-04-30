@@ -39,7 +39,6 @@
     <Preference
         app:key="sync_drive_household_status"
         app:title="@string/pref_sync_drive_household_status_title"
-        app:selectable="false"
         app:iconSpaceReserved="false"/>
 
     <Preference

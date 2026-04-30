@@ -387,3 +387,16 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Notification when a new untrusted device is first added to pending list
 
 **Tests:** Both flavors BUILD SUCCESSFUL; all 26 unit tests pass.
+
+---
+
+### Session 19 — Fresh-Install sync_changes Missing Table
+
+**Goal:** Fix Drive sync silently failing on fresh installs (no `sync_changes` table created by Room on first open; `RuntimeException` from `SyncManager.exportChanges()` swallowed without logging).
+
+- [x] Extract all DDL from `MIGRATION_9_10` into `AppDatabase.createSyncTablesAndTriggers()` (idempotent: `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS`)
+- [x] Call `createSyncTablesAndTriggers()` from `RoomDatabase.Callback.onCreate()` so a fresh-install DB has the sync infrastructure immediately
+- [x] `MIGRATION_9_10.migrate()` delegates to the same helper (no behaviour change for upgrades)
+- [x] Add `catch (RuntimeException e)` in `SyncWorker.doWork()` Drive-sync block — logs via `DebugLogger.e()` and returns `Result.failure()` instead of silently failing
+
+**Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.

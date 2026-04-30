@@ -77,8 +77,8 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     /** Duration (ms) to scan for NSD peers before stopping. */
     private static final long PEER_SCAN_DURATION_MS = 5_000L;
 
-    /** SharedPreferences key where the last-sync epoch-millis is stored. */
-    private static final String PREFS_KEY_LAST_SYNC_EPOCH = "sync_last_epoch_ms";
+    /** SharedPreferences key where the last-sync epoch-millis is stored (written by SyncWorker). */
+    private static final String PREFS_KEY_LAST_SYNC_EPOCH = SyncWorker.PREFS_KEY_LAST_SYNC_EPOCH;
 
     private static final String TAG = "SettingsFragment";
     private Preference notificationTimePreference;
@@ -287,6 +287,12 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     private void updateLastSyncSummary() {
         if (syncLastTimestampPreference == null) return;
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        // Show live sync status while a sync is in progress
+        String status = prefs.getString(SyncWorker.PREFS_KEY_SYNC_STATUS, "");
+        if (status != null && !status.isEmpty()) {
+            syncLastTimestampPreference.setSummary(status);
+            return;
+        }
         long epochMs = prefs.getLong(PREFS_KEY_LAST_SYNC_EPOCH, 0L);
         if (epochMs == 0L) {
             syncLastTimestampPreference.setSummary(getString(R.string.pref_sync_last_timestamp_never));
@@ -457,6 +463,9 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             // In fdroid flavor: no-op.
             SyncSettingsHelper.onDriveEnabledChanged(this, enabled, googleDriveAuthLauncher);
             updateManualSyncSummary();
+        } else if (SyncWorker.PREFS_KEY_SYNC_STATUS.equals(key)
+                || PREFS_KEY_LAST_SYNC_EPOCH.equals(key)) {
+            updateLastSyncSummary();
         }
     }
     private void updateLanguagePreferenceSummary(String languageValue) {
