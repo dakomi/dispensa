@@ -4,32 +4,33 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1380-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1580-line file. Ranges shift slightly if the ToC grows.
 
-- [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~29–106)*
-- [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~110–163)*
-- [Session 3 — SyncManager (Transport-Agnostic Core)](#session-3--syncmanager-transport-agnostic-core) *(~167–247)*
-- [Session 3 (Revision) — Pivot to Trigger-Based CRDT; SyncManager Completion](#session-3-revision--pivot-to-trigger-based-crdt-syncmanager-completion) *(~251–324)*
-- [Session 4 — Local Network Transport](#session-4--local-network-transport) *(~328–413)*
-- [Session 5 — Google Drive Transport (`play` flavor)](#session-5--google-drive-transport-play-flavor) *(~417–507)*
-- [Session 6 — Settings UI](#session-6--settings-ui) *(~511–580)*
-- [Session 7 — ProGuard & Final Integration](#session-7--proguard--final-integration) *(~584–627)*
-- [Session 8 — Release v0.1.9.1](#session-8--release-v0191) *(~631–656)*
-- [Session 9 — Google Sign-In Flow](#session-9--google-sign-in-flow) *(~660–723)*
-- [Session 10 — Peer Discovery & Pairing UI](#session-10--peer-discovery--pairing-ui) *(~727–837)*
-- [Session 11 — Multi-Account Household Drive Sync](#session-11--multi-account-household-drive-sync) *(~841–911)*
-- [Session 12 — Sharing Permission Management](#session-12--sharing-permission-management) *(~915–978)*
-- [Session 13 — Debug Logging Build](#session-13--debug-logging-build) *(~982–1048)*
-- [Session 14 — Google Sign-In Troubleshooting](#session-14--google-sign-in-troubleshooting) *(~1052–1113)*
-- [Session 15 — Credential Manager Migration + Google Cloud Setup Guide](#session-15--credential-manager-migration--google-cloud-setup-guide) *(~1117–1158)* ↳ has sub-sessions
-  - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1162–1185)*
-  - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1187–1222)*
-- [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1238–1295)* ↳ has sub-sessions
-  - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1279–1345)*
-  - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1347–1390)*
-- [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1382–1450)*
-- [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1422–1490)* ↳ has sub-sessions
-  - [Session 18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) *(~1490–1570)*
+- [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~37–117)*
+- [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~118–174)*
+- [Session 3 — SyncManager (Transport-Agnostic Core)](#session-3--syncmanager-transport-agnostic-core) *(~175–258)*
+- [Session 3 (Revision) — Pivot to Trigger-Based CRDT; SyncManager Completion](#session-3-revision--pivot-to-trigger-based-crdt-syncmanager-completion) *(~259–335)*
+- [Session 4 — Local Network Transport](#session-4--local-network-transport) *(~336–424)*
+- [Session 5 — Google Drive Transport (`play` flavor)](#session-5--google-drive-transport-play-flavor) *(~425–518)*
+- [Session 6 — Settings UI](#session-6--settings-ui) *(~519–591)*
+- [Session 7 — ProGuard & Final Integration](#session-7--proguard--final-integration) *(~592–638)*
+- [Session 8 — Release v0.1.9.1](#session-8--release-v0191) *(~639–667)*
+- [Session 9 — Google Sign-In Flow](#session-9--google-sign-in-flow) *(~668–734)*
+- [Session 10 — Peer Discovery & Pairing UI](#session-10--peer-discovery--pairing-ui) *(~735–848)*
+- [Session 11 — Multi-Account Household Drive Sync](#session-11--multi-account-household-drive-sync) *(~849–922)*
+- [Session 12 — Sharing Permission Management](#session-12--sharing-permission-management) *(~923–989)*
+- [Session 13 — Debug Logging Build](#session-13--debug-logging-build) *(~990–1059)*
+- [Session 14 — Google Sign-In Troubleshooting](#session-14--google-sign-in-troubleshooting) *(~1060–1124)*
+- [Session 15 — Credential Manager Migration + Google Cloud Setup Guide](#session-15--credential-manager-migration--google-cloud-setup-guide) *(~1125–1169)* ↳ has sub-sessions
+  - [Session 15.1 — Fix silent sign-in failure in OAuth Testing mode](#session-151--fix-silent-sign-in-failure-in-oauth-testing-mode) *(~1170–1196)*
+  - [Session 15.2 — Fix CustomCredential from GetSignInWithGoogleOption](#session-152--fix-customcredential-from-getsigninwithgoogleoption) *(~1197–1244)*
+- [Session 16 — Drive API Crash Fixes + Stability Hardening](#session-16--drive-api-crash-fixes--stability-hardening) *(~1245–1283)* ↳ has sub-sessions
+  - [Session 16.1 — R8 ProGuard + Deeper Error Handling for Drive API](#session-161--r8-proguard--deeper-error-handling-for-drive-api) *(~1284–1334)*
+  - [Session 16.2 — CI Failure Diagnosis: R8 missing_rules.txt](#session-162--ci-failure-diagnosis-r8-missing_rulestxt) *(~1335–1385)*
+- [Session 17 — Fix deviceId Init + Drive Sync Gating](#session-17--fix-deviceid-init--drive-sync-gating) *(~1386–1423)*
+- [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1424–1477)* ↳ has sub-sessions
+  - [Session 18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) *(~1478–1538)*
+- [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1539–1580)*
 
 ---
 
@@ -1532,3 +1533,44 @@ _(Continuation of Session 18)_
   - Household folder name in status preference
   - Notification on new pending sync device
 - No known remaining blockers.
+
+---
+
+## Session 19 — Fresh-Install sync_changes Missing Table
+
+**Date:** 2026-04-30
+**Goal:** Diagnose and fix the root cause of Drive sync silently failing for users with a fresh install (no data ever uploaded to Drive despite the scheduler running correctly).
+
+### What was done
+
+**Root-cause analysis**
+
+The debug log shows `SyncWorker: doWork: Drive transport available, starting Drive sync` logged multiple times (triggered manually) with **no follow-up log from either `SyncManager` or `GoogleDriveSyncTransport`**. Every sync attempt silently disappeared — not even `push: starting` or the `exportChanges` result line appeared.
+
+The culprit: `sync_changes` and `sync_import_lock` are **not Room entities**. Room creates the database schema from `@Entity`-annotated classes on a fresh install (DB version 10 from scratch). `MIGRATION_9_10` is only executed when upgrading an existing DB from v9 → v10. A fresh-install user therefore has no `sync_changes` table, and no change-capture triggers are created either (so pantry items can be added normally — the missing triggers just mean no changes are recorded). When `SyncManager.exportChanges(0L)` queries that table it throws `SQLiteException: no such table: sync_changes`. Because the Drive sync block in `doWork()` only caught `InterruptedException`, the `RuntimeException` propagated silently out of `doWork()` with no log entry and no error shown to the user.
+
+The `testDriveConnection` button worked fine because it calls `GoogleDriveSyncTransport.pull()` which only touches Google Drive, never the local database.
+
+**Fix 1 — `AppDatabase.createSyncTablesAndTriggers()`**
+
+Extracted all DDL from `MIGRATION_9_10` (sync_changes table, sync_import_lock table, 12 triggers) into a new `static void createSyncTablesAndTriggers(SupportSQLiteDatabase)` helper. All statements use `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS` so the method is idempotent. `MIGRATION_9_10.migrate()` now delegates to this helper (identical behaviour for upgrades). The `RoomDatabase.Callback.onCreate()` hook calls the helper synchronously before the async storage-location seeding, ensuring the sync infrastructure exists from the very first DB open on a fresh install.
+
+**Fix 2 — `SyncWorker.doWork()` RuntimeException guard**
+
+Added a `catch (RuntimeException e)` block to the Drive sync section that logs the exception via `DebugLogger.e()` and returns `Result.failure()`. This ensures any future unexpected error in the sync pipeline is visible in the debug log rather than silently retried.
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/data/AppDatabase.java` — extracted `createSyncTablesAndTriggers()`; called from `MIGRATION_9_10` and `onCreate` callback
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorker.java` — added `catch (RuntimeException e)` with `DebugLogger.e()` in Drive sync block
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 20
+
+- Fresh-install users will now have `sync_changes` and all triggers created immediately when Room opens the database for the first time. Subsequent `SyncWorker` runs will find the table and upload pantry data to Drive.
+- Existing users whose DB was created via MIGRATION_9_10 are unaffected — the `IF NOT EXISTS` guard makes the `onCreate` call a no-op for them.
+- No known remaining blockers for core sync functionality.
