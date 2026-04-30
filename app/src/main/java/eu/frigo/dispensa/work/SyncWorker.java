@@ -202,6 +202,10 @@ public class SyncWorker extends Worker {
             DebugLogger.w(TAG, "doWork: Drive sync interrupted");
             Log.w(TAG, "Drive sync interrupted");
             return Result.failure();
+        } catch (RuntimeException e) {
+            DebugLogger.e(TAG, "doWork: unexpected Drive sync error", e);
+            Log.e(TAG, "Unexpected Drive sync error", e);
+            return Result.failure();
         }
 
         DebugLogger.i(TAG, "doWork: sync cycle complete — returning success");

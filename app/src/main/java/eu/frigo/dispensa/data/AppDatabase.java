@@ -69,172 +69,194 @@ public abstract class AppDatabase extends RoomDatabase {
     public static final Migration MIGRATION_9_10 = new Migration(9, 10) {
         @Override
         public void migrate(SupportSQLiteDatabase database) {
-            // ── sync_changes: one row per (table, pk) holding the latest version ──────
-            database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS sync_changes ("
-                            + "tbl TEXT NOT NULL, "
-                            + "pk_val TEXT NOT NULL, "
-                            + "op TEXT NOT NULL, "
-                            + "row_json TEXT, "
-                            + "clock INTEGER NOT NULL, "
-                            + "PRIMARY KEY(tbl, pk_val))");
-
-            // ── sync_import_lock: prevents triggers re-firing during import ───────────
-            database.execSQL(
-                    "CREATE TABLE IF NOT EXISTS sync_import_lock "
-                            + "(locked INTEGER NOT NULL DEFAULT 0)");
-            database.execSQL(
-                    "INSERT OR IGNORE INTO sync_import_lock (rowid, locked) VALUES (1, 0)");
-
-            // ── products triggers ─────────────────────────────────────────────────────
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_products_insert "
-                            + "AFTER INSERT ON products "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('products', CAST(NEW.id AS TEXT), 'UPSERT', "
-                            + "json_object('id', NEW.id, 'barcode', NEW.barcode, "
-                            + "'quantity', NEW.quantity, 'expiry_date', NEW.expiry_date, "
-                            + "'product_name', NEW.product_name, 'image_url', NEW.image_url, "
-                            + "'storage_location', NEW.storage_location, "
-                            + "'opened_date', NEW.opened_date, "
-                            + "'shelf_life_after_opening_days', NEW.shelf_life_after_opening_days), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_products_update "
-                            + "AFTER UPDATE ON products "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('products', CAST(NEW.id AS TEXT), 'UPSERT', "
-                            + "json_object('id', NEW.id, 'barcode', NEW.barcode, "
-                            + "'quantity', NEW.quantity, 'expiry_date', NEW.expiry_date, "
-                            + "'product_name', NEW.product_name, 'image_url', NEW.image_url, "
-                            + "'storage_location', NEW.storage_location, "
-                            + "'opened_date', NEW.opened_date, "
-                            + "'shelf_life_after_opening_days', NEW.shelf_life_after_opening_days), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_products_delete "
-                            + "AFTER DELETE ON products "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('products', CAST(OLD.id AS TEXT), 'DELETE', NULL, "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-
-            // ── categories_definitions triggers ───────────────────────────────────────
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_categories_insert "
-                            + "AFTER INSERT ON categories_definitions "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('categories_definitions', CAST(NEW.category_id AS TEXT), 'UPSERT', "
-                            + "json_object('category_id', NEW.category_id, 'tag_name', NEW.tag_name, "
-                            + "'display_name_it', NEW.display_name_it, 'language_code', NEW.language_code, "
-                            + "'color_hex', NEW.color_hex), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_categories_update "
-                            + "AFTER UPDATE ON categories_definitions "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('categories_definitions', CAST(NEW.category_id AS TEXT), 'UPSERT', "
-                            + "json_object('category_id', NEW.category_id, 'tag_name', NEW.tag_name, "
-                            + "'display_name_it', NEW.display_name_it, 'language_code', NEW.language_code, "
-                            + "'color_hex', NEW.color_hex), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_categories_delete "
-                            + "AFTER DELETE ON categories_definitions "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('categories_definitions', CAST(OLD.category_id AS TEXT), 'DELETE', NULL, "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-
-            // ── product_category_links triggers ───────────────────────────────────────
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_insert "
-                            + "AFTER INSERT ON product_category_links "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('product_category_links', "
-                            + "CAST(NEW.product_id_fk AS TEXT) || ',' || CAST(NEW.category_id_fk AS TEXT), "
-                            + "'UPSERT', "
-                            + "json_object('product_id_fk', NEW.product_id_fk, 'category_id_fk', NEW.category_id_fk), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_update "
-                            + "AFTER UPDATE ON product_category_links "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('product_category_links', "
-                            + "CAST(NEW.product_id_fk AS TEXT) || ',' || CAST(NEW.category_id_fk AS TEXT), "
-                            + "'UPSERT', "
-                            + "json_object('product_id_fk', NEW.product_id_fk, 'category_id_fk', NEW.category_id_fk), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_delete "
-                            + "AFTER DELETE ON product_category_links "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('product_category_links', "
-                            + "CAST(OLD.product_id_fk AS TEXT) || ',' || CAST(OLD.category_id_fk AS TEXT), "
-                            + "'DELETE', NULL, "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-
-            // ── storage_locations triggers ────────────────────────────────────────────
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_insert "
-                            + "AFTER INSERT ON storage_locations "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('storage_locations', CAST(NEW.id AS TEXT), 'UPSERT', "
-                            + "json_object('id', NEW.id, 'name', NEW.name, "
-                            + "'internal_key', NEW.internal_key, 'order_index', NEW.order_index, "
-                            + "'is_default', NEW.is_default, 'is_predefined', NEW.is_predefined), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_update "
-                            + "AFTER UPDATE ON storage_locations "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('storage_locations', CAST(NEW.id AS TEXT), 'UPSERT', "
-                            + "json_object('id', NEW.id, 'name', NEW.name, "
-                            + "'internal_key', NEW.internal_key, 'order_index', NEW.order_index, "
-                            + "'is_default', NEW.is_default, 'is_predefined', NEW.is_predefined), "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
-            database.execSQL(
-                    "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_delete "
-                            + "AFTER DELETE ON storage_locations "
-                            + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
-                            + "BEGIN "
-                            + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
-                            + "VALUES('storage_locations', CAST(OLD.id AS TEXT), 'DELETE', NULL, "
-                            + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
-                            + "END");
+            createSyncTablesAndTriggers(database);
         }
     };
+
+    /**
+     * Creates the {@code sync_changes} and {@code sync_import_lock} tables together with
+     * all 12 change-capture triggers (one per CRUD operation × 4 synced tables).
+     *
+     * <p>All statements use {@code CREATE TABLE IF NOT EXISTS} / {@code CREATE TRIGGER IF NOT
+     * EXISTS} so this method is idempotent and safe to call on both fresh installs (via the
+     * {@link RoomDatabase.Callback#onCreate} hook) and schema upgrades (via
+     * {@link #MIGRATION_9_10}).
+     *
+     * <p><strong>Why this method exists:</strong> Room creates the database schema from entity
+     * annotations when installing the app for the first time (i.e., there is no pre-existing
+     * database to migrate).  Migrations are only executed when upgrading an existing database.
+     * Because {@code sync_changes} and {@code sync_import_lock} are <em>not</em> Room
+     * entities, they would be absent on a fresh install if this setup were limited to the
+     * migration path — causing {@link eu.frigo.dispensa.sync.SyncManager#exportChanges} to
+     * throw {@code SQLiteException: no such table: sync_changes} and silently kill every
+     * sync cycle.
+     */
+    static void createSyncTablesAndTriggers(SupportSQLiteDatabase database) {
+        // ── sync_changes: one row per (table, pk) holding the latest version ──────
+        database.execSQL(
+                "CREATE TABLE IF NOT EXISTS sync_changes ("
+                        + "tbl TEXT NOT NULL, "
+                        + "pk_val TEXT NOT NULL, "
+                        + "op TEXT NOT NULL, "
+                        + "row_json TEXT, "
+                        + "clock INTEGER NOT NULL, "
+                        + "PRIMARY KEY(tbl, pk_val))");
+
+        // ── sync_import_lock: prevents triggers re-firing during import ───────────
+        database.execSQL(
+                "CREATE TABLE IF NOT EXISTS sync_import_lock "
+                        + "(locked INTEGER NOT NULL DEFAULT 0)");
+        database.execSQL(
+                "INSERT OR IGNORE INTO sync_import_lock (rowid, locked) VALUES (1, 0)");
+
+        // ── products triggers ─────────────────────────────────────────────────────
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_products_insert "
+                        + "AFTER INSERT ON products "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('products', CAST(NEW.id AS TEXT), 'UPSERT', "
+                        + "json_object('id', NEW.id, 'barcode', NEW.barcode, "
+                        + "'quantity', NEW.quantity, 'expiry_date', NEW.expiry_date, "
+                        + "'product_name', NEW.product_name, 'image_url', NEW.image_url, "
+                        + "'storage_location', NEW.storage_location, "
+                        + "'opened_date', NEW.opened_date, "
+                        + "'shelf_life_after_opening_days', NEW.shelf_life_after_opening_days), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_products_update "
+                        + "AFTER UPDATE ON products "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('products', CAST(NEW.id AS TEXT), 'UPSERT', "
+                        + "json_object('id', NEW.id, 'barcode', NEW.barcode, "
+                        + "'quantity', NEW.quantity, 'expiry_date', NEW.expiry_date, "
+                        + "'product_name', NEW.product_name, 'image_url', NEW.image_url, "
+                        + "'storage_location', NEW.storage_location, "
+                        + "'opened_date', NEW.opened_date, "
+                        + "'shelf_life_after_opening_days', NEW.shelf_life_after_opening_days), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_products_delete "
+                        + "AFTER DELETE ON products "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('products', CAST(OLD.id AS TEXT), 'DELETE', NULL, "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+
+        // ── categories_definitions triggers ───────────────────────────────────────
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_categories_insert "
+                        + "AFTER INSERT ON categories_definitions "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('categories_definitions', CAST(NEW.category_id AS TEXT), 'UPSERT', "
+                        + "json_object('category_id', NEW.category_id, 'tag_name', NEW.tag_name, "
+                        + "'display_name_it', NEW.display_name_it, 'language_code', NEW.language_code, "
+                        + "'color_hex', NEW.color_hex), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_categories_update "
+                        + "AFTER UPDATE ON categories_definitions "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('categories_definitions', CAST(NEW.category_id AS TEXT), 'UPSERT', "
+                        + "json_object('category_id', NEW.category_id, 'tag_name', NEW.tag_name, "
+                        + "'display_name_it', NEW.display_name_it, 'language_code', NEW.language_code, "
+                        + "'color_hex', NEW.color_hex), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_categories_delete "
+                        + "AFTER DELETE ON categories_definitions "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('categories_definitions', CAST(OLD.category_id AS TEXT), 'DELETE', NULL, "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+
+        // ── product_category_links triggers ───────────────────────────────────────
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_insert "
+                        + "AFTER INSERT ON product_category_links "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('product_category_links', "
+                        + "CAST(NEW.product_id_fk AS TEXT) || ',' || CAST(NEW.category_id_fk AS TEXT), "
+                        + "'UPSERT', "
+                        + "json_object('product_id_fk', NEW.product_id_fk, 'category_id_fk', NEW.category_id_fk), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_update "
+                        + "AFTER UPDATE ON product_category_links "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('product_category_links', "
+                        + "CAST(NEW.product_id_fk AS TEXT) || ',' || CAST(NEW.category_id_fk AS TEXT), "
+                        + "'UPSERT', "
+                        + "json_object('product_id_fk', NEW.product_id_fk, 'category_id_fk', NEW.category_id_fk), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_product_category_links_delete "
+                        + "AFTER DELETE ON product_category_links "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('product_category_links', "
+                        + "CAST(OLD.product_id_fk AS TEXT) || ',' || CAST(OLD.category_id_fk AS TEXT), "
+                        + "'DELETE', NULL, "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+
+        // ── storage_locations triggers ────────────────────────────────────────────
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_insert "
+                        + "AFTER INSERT ON storage_locations "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('storage_locations', CAST(NEW.id AS TEXT), 'UPSERT', "
+                        + "json_object('id', NEW.id, 'name', NEW.name, "
+                        + "'internal_key', NEW.internal_key, 'order_index', NEW.order_index, "
+                        + "'is_default', NEW.is_default, 'is_predefined', NEW.is_predefined), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_update "
+                        + "AFTER UPDATE ON storage_locations "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('storage_locations', CAST(NEW.id AS TEXT), 'UPSERT', "
+                        + "json_object('id', NEW.id, 'name', NEW.name, "
+                        + "'internal_key', NEW.internal_key, 'order_index', NEW.order_index, "
+                        + "'is_default', NEW.is_default, 'is_predefined', NEW.is_predefined), "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+        database.execSQL(
+                "CREATE TRIGGER IF NOT EXISTS sync_storage_locations_delete "
+                        + "AFTER DELETE ON storage_locations "
+                        + "WHEN (SELECT locked FROM sync_import_lock LIMIT 1) = 0 "
+                        + "BEGIN "
+                        + "INSERT OR REPLACE INTO sync_changes(tbl, pk_val, op, row_json, clock) "
+                        + "VALUES('storage_locations', CAST(OLD.id AS TEXT), 'DELETE', NULL, "
+                        + "(SELECT COALESCE(MAX(clock), 0) + 1 FROM sync_changes)); "
+                        + "END");
+    }
 
     public static AppDatabase getDatabase(final Context context) {
         if (INSTANCE == null) {
@@ -244,6 +266,10 @@ public abstract class AppDatabase extends RoomDatabase {
                     @Override
                     public void onCreate(@NonNull SupportSQLiteDatabase db) {
                         super.onCreate(db);
+                        // Create sync tables and triggers that are not Room entities and
+                        // therefore not included in the schema generated from annotations.
+                        // MIGRATION_9_10 handles upgrades; this covers fresh installs.
+                        createSyncTablesAndTriggers(db);
                         Executors.newSingleThreadExecutor().execute(() -> {
                             Log.d("AppDatabase", "Database onCreate - Prepopolamento StorageLocations");
                             StorageLocationDao dao = INSTANCE.storageLocationDao();
