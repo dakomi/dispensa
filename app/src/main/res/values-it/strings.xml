@@ -216,6 +216,13 @@ I prodotti in questa dispensa potrebbero dover essere riassegnati.</string>
     <string name="pref_cat_sync_title">Sincronizzazione</string>
     <string name="pref_sync_local_network_title">Sincronizzazione locale</string>
     <string name="pref_sync_local_network_summary">Sincronizza automaticamente con altri dispositivi sulla stessa rete Wi-Fi</string>
+    <string name="pref_sync_interval_title">Intervallo di sincronizzazione</string>
+    <string name="pref_sync_interval_summary">Con quale frequenza sincronizzare in background (%s)</string>
+    <string name="pref_sync_interval_15min">Ogni 15 minuti</string>
+    <string name="pref_sync_interval_30min">Ogni 30 minuti (predefinito)</string>
+    <string name="pref_sync_interval_1h">Ogni ora</string>
+    <string name="pref_sync_interval_2h">Ogni 2 ore</string>
+    <string name="pref_sync_interval_4h">Ogni 4 ore</string>
     <string name="pref_sync_last_timestamp_title">Ultima sincronizzazione</string>
     <string name="pref_sync_last_timestamp_never">Mai</string>
     <string name="pref_sync_trigger_manual_title">Sincronizza ora</string>

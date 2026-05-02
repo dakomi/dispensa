@@ -59,7 +59,7 @@ public class Repository {
     public void insert(Product product) {
         AppDatabase.databaseWriteExecutor.execute(() -> {
             productDao.insert(product);
-            SyncWorkerScheduler.triggerManualSync(application);
+            SyncWorkerScheduler.triggerDebouncedSync(application);
         });
     }
 
@@ -67,7 +67,7 @@ public class Repository {
         AppDatabase.databaseWriteExecutor.execute(() -> {
             deleteLocalImageIfAny(selectedProduct.getImageUrl());
             productDao.delete(selectedProduct);
-            SyncWorkerScheduler.triggerManualSync(application);
+            SyncWorkerScheduler.triggerDebouncedSync(application);
         });
     }
 
@@ -79,7 +79,7 @@ public class Repository {
                 deleteLocalImageIfAny(oldProduct.getImageUrl());
             }
             productDao.update(product);
-            SyncWorkerScheduler.triggerManualSync(application);
+            SyncWorkerScheduler.triggerDebouncedSync(application);
         });
     }
 
@@ -121,7 +121,7 @@ public class Repository {
                     productCategoryLinkDao.insertAll(linksToInsert);
                 }
             }
-            SyncWorkerScheduler.triggerManualSync(application);
+            SyncWorkerScheduler.triggerDebouncedSync(application);
         });
     }
 
@@ -156,7 +156,7 @@ public class Repository {
                     productCategoryLinkDao.insertAll(linksToInsert);
                 }
             }
-            SyncWorkerScheduler.triggerManualSync(application);
+            SyncWorkerScheduler.triggerDebouncedSync(application);
         });
     }
     public LiveData<List<StorageLocation>> getAllLocationsSorted() {

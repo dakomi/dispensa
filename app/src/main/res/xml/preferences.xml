@@ -114,6 +114,15 @@
             app:defaultValue="false"
             app:iconSpaceReserved="false"/>
 
+        <ListPreference
+            app:key="sync_interval_minutes"
+            app:title="@string/pref_sync_interval_title"
+            app:summary="@string/pref_sync_interval_summary"
+            app:entries="@array/sync_interval_entries"
+            app:entryValues="@array/sync_interval_values"
+            app:defaultValue="30"
+            app:iconSpaceReserved="false"/>
+
         <Preference
             app:key="sync_last_timestamp"
             app:title="@string/pref_sync_last_timestamp_title"
