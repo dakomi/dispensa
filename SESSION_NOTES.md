@@ -31,7 +31,8 @@
 - [Session 18 — Empty Household Folder: Scheduler Bug + Sync-on-Change + Context-Aware Sync Button](#session-18--empty-household-folder-scheduler-bug--sync-on-change--context-aware-sync-button) *(~1424–1477)* ↳ has sub-sessions
   - [Session 18.1 — Household polish: copy button, QR, folder name, device notification](#session-181--household-polish-copy-button-qr-folder-name-device-notification) *(~1478–1538)*
   - [Session 18.2 — Household status interactive + invite flow + live sync status](#session-182--household-status-interactive--invite-flow--live-sync-status) *(~1539–1600)*
-- [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)*
+- [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)* ↳ has sub-sessions
+  - [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix) *(~1638–1680)*
 
 ---
 
@@ -1592,6 +1593,8 @@ _(Continuation of Session 18 / 18.1)_
 
 ## Session 19 — Fresh-Install sync_changes Missing Table
 
+> **Sub-sessions:** [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix)
+
 **Date:** 2026-04-30
 **Goal:** Diagnose and fix the root cause of Drive sync silently failing for users with a fresh install (no data ever uploaded to Drive despite the scheduler running correctly).
 
@@ -1626,11 +1629,41 @@ Added a `catch (RuntimeException e)` block to the Drive sync section that logs t
 ### Handoff to Session 20
 
 _(Updated by Session 18.2: household status is now interactive, an email-invite flow was added to the deep-link dialog, missing folder names are fetched from Drive in the background, and live sync status is shown in the Last Sync preference. See Session 18.2 for details.)_
+_(Updated by Session 19.1: `createSyncTablesAndTriggers` is now also called from `onOpen` so existing v10 databases that were created before the `onCreate` fix are repaired on the next app launch.)_
 
-- Fresh-install users will now have `sync_changes` and all triggers created immediately when Room opens the database for the first time. Subsequent `SyncWorker` runs will find the table and upload pantry data to Drive.
-- Existing users whose DB was created via MIGRATION_9_10 are unaffected — the `IF NOT EXISTS` guard makes the `onCreate` call a no-op for them.
+- `sync_changes` and all triggers are now guaranteed to exist on every database open (`onCreate` + `onOpen`), covering both fresh installs and existing databases that were already at v10 before Session 19.
 - No known remaining blockers for core sync functionality.
 - Household status preference is tappable; tapping it re-shows the QR/deep-link dialog so the host can invite more members at any time.
 - The "Invite by email" button in the deep-link dialog calls `HouseholdManager.grantAccess()` on a background thread; guests who are not the folder owner will get an HTTP 403 error Toast (expected behaviour).
 - `sync_last_epoch_ms` is now written after every successful sync — "Last sync" will no longer permanently show "Never" once sync has run.
 - Percentage-based upload/download progress is not yet implemented (requires `SyncTransport` interface changes).
+
+---
+
+## Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)
+
+**Date:** 2026-05-02  
+**Goal:** Fix `SQLiteException: no such table: sync_changes` on devices whose database was already at v10 before Session 19's `onCreate` fix was deployed.
+
+### What was done
+
+**Root-cause analysis**
+
+The user reported the same `no such table: sync_changes` error (visible in debug log via the `catch (RuntimeException)` guard added in Session 19) even after Session 19's fix. Session 19 added `createSyncTablesAndTriggers()` to `RoomDatabase.Callback.onCreate()` — but `onCreate` only fires the very first time Room creates a database. Users who had already installed the app (with the database at v10) before Session 19 shipped see a database that Room considers fully up-to-date: no migration runs, and `onCreate` is never called again. Their `sync_changes` table therefore remains absent.
+
+**Fix — `AppDatabase.onOpen()` callback**
+
+Added `createSyncTablesAndTriggers(db)` as the first synchronous statement in `RoomDatabase.Callback.onOpen()`, before the async storage-location executor block. Because all DDL uses `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS`, this is completely idempotent and adds negligible overhead on subsequent opens (SQLite resolves the IF NOT EXISTS check instantly). This guarantees the sync infrastructure exists on every database open, covering all three paths:
+1. Fresh install (onCreate fires → onOpen fires → both calls are no-ops for each other)
+2. Upgrade from v9 via MIGRATION_9_10 (migration creates tables; onOpen's IF NOT EXISTS calls are no-ops)
+3. Existing v10 database without sync tables (onOpen creates them on the next app launch)
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/data/AppDatabase.java` — added `createSyncTablesAndTriggers(db)` at the top of `onOpen()` callback
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+- Verified logic: `onOpen` receives the live `SupportSQLiteDatabase` handle; all 14 DDL statements use `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS`, so on a database that already has the tables the calls are instant no-ops. On an affected device (v10 DB, no sync tables) the next app launch will execute `onOpen`, create `sync_changes` and all 12 triggers, and the subsequent `SyncWorker` run will find the table and successfully call `exportChanges`.
