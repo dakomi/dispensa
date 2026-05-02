@@ -400,3 +400,21 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Add `catch (RuntimeException e)` in `SyncWorker.doWork()` Drive-sync block — logs via `DebugLogger.e()` and returns `Result.failure()` instead of silently failing
 
 **Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.
+
+---
+
+### Session 20 — Periodic Sync Interval + Bootstrap Backfill ✅
+
+**Goal:** Replace immediate sync-on-every-change with batched/debounced + periodic syncs; add full database bootstrap for new household devices.
+
+- [x] Make periodic sync interval user-configurable (ListPreference `sync_interval_minutes`, default 30 min, options 15/30/60/120/240 min)
+- [x] `SyncWorkerScheduler.schedulePeriodicSync()` reads interval from SharedPreferences; policy changed from KEEP → UPDATE so interval changes take effect immediately
+- [x] `SettingsFragment` handles `sync_interval_minutes` preference change (reschedules periodic sync when active)
+- [x] Add `SyncWorkerScheduler.triggerDebouncedSync()` (2-min initial delay + REPLACE policy) for change-triggered syncs from `Repository`
+- [x] `Repository` calls `triggerDebouncedSync` instead of `triggerManualSync` — batches grocery-shop bursts into a single sync
+- [x] `triggerManualSync` remains immediate (no delay) for explicit "Sync now" button
+- [x] Add `AppDatabase.backfillSyncChangesFromTables()` — inserts `INSERT OR IGNORE` synthetic UPSERT rows (clock=1) for all existing table rows not yet in `sync_changes`
+- [x] Call backfill from `onOpen()` so existing databases are bootstrapped on next app launch
+- [x] Add string resources and arrays for sync interval options (EN + IT)
+
+**Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.

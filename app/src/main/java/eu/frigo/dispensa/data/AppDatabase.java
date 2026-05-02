@@ -258,6 +258,58 @@ public abstract class AppDatabase extends RoomDatabase {
                         + "END");
     }
 
+    /**
+     * Backfills {@code sync_changes} with synthetic UPSERT entries for rows in the four synced
+     * tables that do not yet have a change record.
+     *
+     * <p>This covers devices that had products in the database <em>before</em> the sync
+     * infrastructure was installed (e.g. users who installed the app before the sync feature
+     * shipped). Without backfilling, those pre-sync rows would be absent from
+     * {@code sync_changes}, so {@link eu.frigo.dispensa.sync.SyncManager#exportChanges(long)}
+     * with {@code lastSyncVersion=0} would silently omit them and a newly-joined household
+     * member would receive an incomplete pantry.
+     *
+     * <p>All four INSERT statements use {@code INSERT OR IGNORE} so rows already tracked in
+     * {@code sync_changes} are left untouched (their real Lamport clock is preserved).
+     * Pre-sync rows get clock=1, which is the lowest possible value and will lose any LWW
+     * conflict against a real change from another device.
+     *
+     * <p>This method is idempotent and adds negligible overhead on subsequent opens because
+     * the {@code INSERT OR IGNORE} statements resolve instantly once every row is tracked.
+     */
+    static void backfillSyncChangesFromTables(SupportSQLiteDatabase database) {
+        database.execSQL(
+                "INSERT OR IGNORE INTO sync_changes (tbl, pk_val, op, row_json, clock) "
+                        + "SELECT 'products', CAST(id AS TEXT), 'UPSERT', "
+                        + "json_object('id', id, 'barcode', barcode, 'quantity', quantity, "
+                        + "'expiry_date', expiry_date, 'product_name', product_name, "
+                        + "'image_url', image_url, 'storage_location', storage_location, "
+                        + "'opened_date', opened_date, "
+                        + "'shelf_life_after_opening_days', shelf_life_after_opening_days), 1 "
+                        + "FROM products");
+        database.execSQL(
+                "INSERT OR IGNORE INTO sync_changes (tbl, pk_val, op, row_json, clock) "
+                        + "SELECT 'categories_definitions', CAST(category_id AS TEXT), 'UPSERT', "
+                        + "json_object('category_id', category_id, 'tag_name', tag_name, "
+                        + "'display_name_it', display_name_it, 'language_code', language_code, "
+                        + "'color_hex', color_hex), 1 "
+                        + "FROM categories_definitions");
+        database.execSQL(
+                "INSERT OR IGNORE INTO sync_changes (tbl, pk_val, op, row_json, clock) "
+                        + "SELECT 'product_category_links', "
+                        + "CAST(product_id_fk AS TEXT) || ',' || CAST(category_id_fk AS TEXT), "
+                        + "'UPSERT', "
+                        + "json_object('product_id_fk', product_id_fk, 'category_id_fk', category_id_fk), 1 "
+                        + "FROM product_category_links");
+        database.execSQL(
+                "INSERT OR IGNORE INTO sync_changes (tbl, pk_val, op, row_json, clock) "
+                        + "SELECT 'storage_locations', CAST(id AS TEXT), 'UPSERT', "
+                        + "json_object('id', id, 'name', name, 'internal_key', internal_key, "
+                        + "'order_index', order_index, 'is_default', is_default, "
+                        + "'is_predefined', is_predefined), 1 "
+                        + "FROM storage_locations");
+    }
+
     public static AppDatabase getDatabase(final Context context) {
         if (INSTANCE == null) {
             synchronized (AppDatabase.class) {
@@ -288,6 +340,11 @@ public abstract class AppDatabase extends RoomDatabase {
                         // This covers the case where the database was already at v10 before
                         // the onCreate fix was deployed (onCreate only fires on first creation).
                         createSyncTablesAndTriggers(db);
+                        // Backfill sync_changes for any rows that pre-date the sync feature
+                        // (i.e. products added before triggers were installed). This ensures
+                        // exportChanges(0) always returns the complete pantry state, so a
+                        // newly-joined household device receives a full bootstrap.
+                        backfillSyncChangesFromTables(db);
                         Executors.newSingleThreadExecutor().execute(() -> {
                             Log.d("AppDatabase", "Database onOpen - Verifica/Aggiornamento StorageLocations predefinite");
                             StorageLocationDao dao = INSTANCE.storageLocationDao();

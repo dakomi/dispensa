@@ -61,6 +61,7 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     public static final String KEY_OFF_CACHE_CLEAR = "pref_off_cache_clear";
     public static final String KEY_DEFUALT_ICON = "pref_predefined_tab_icon";
     public static final String KEY_SYNC_LOCAL_NETWORK_ENABLED = SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED;
+    public static final String KEY_SYNC_INTERVAL_MINUTES = SyncWorkerScheduler.PREF_SYNC_INTERVAL_MINUTES;
     public static final String KEY_SYNC_LAST_TIMESTAMP = "sync_last_timestamp";
     public static final String KEY_SYNC_TRIGGER_MANUAL = "sync_trigger_manual";
     public static final String KEY_SYNC_LOCAL_PEERS_STATUS = "sync_local_peers_status";
@@ -447,6 +448,17 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                 Log.d(TAG, "Local network sync disabled — periodic work cancelled.");
             }
             updateManualSyncSummary();
+        } else if (KEY_SYNC_INTERVAL_MINUTES.equals(key)) {
+            if (context == null) return;
+            // Reschedule the periodic sync job with the new interval.
+            // Only bother if at least one sync mode is active.
+            SharedPreferences prefs2 = PreferenceManager.getDefaultSharedPreferences(context);
+            boolean localOn = prefs2.getBoolean(KEY_SYNC_LOCAL_NETWORK_ENABLED, false);
+            boolean driveOn = prefs2.getBoolean(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED, false);
+            if (localOn || driveOn) {
+                SyncWorkerScheduler.schedulePeriodicSync(context);
+                Log.d(TAG, "Sync interval changed — periodic work rescheduled.");
+            }
         } else if (DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED.equals(key)) {
             if (context == null) return;
             boolean enabled = sharedPreferences.getBoolean(key, false);

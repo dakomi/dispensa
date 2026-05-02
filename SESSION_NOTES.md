@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1650-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1730-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~37–117)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~118–174)*
@@ -33,6 +33,7 @@
   - [Session 18.2 — Household status interactive + invite flow + live sync status](#session-182--household-status-interactive--invite-flow--live-sync-status) *(~1539–1600)*
 - [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)* ↳ has sub-sessions
   - [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix) *(~1638–1680)*
+- [Session 20 — Periodic Sync Interval + Bootstrap Backfill](#session-20--periodic-sync-interval--bootstrap-backfill) *(~1682–1730)*
 
 ---
 
@@ -1667,3 +1668,54 @@ Added `createSyncTablesAndTriggers(db)` as the first synchronous statement in `R
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
 - Verified logic: `onOpen` receives the live `SupportSQLiteDatabase` handle; all 14 DDL statements use `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS`, so on a database that already has the tables the calls are instant no-ops. On an affected device (v10 DB, no sync tables) the next app launch will execute `onOpen`, create `sync_changes` and all 12 triggers, and the subsequent `SyncWorker` run will find the table and successfully call `exportChanges`.
+
+## Session 20 — Periodic Sync Interval + Bootstrap Backfill
+
+**Date:** 2026-05-02
+**Goal:** Replace sync-on-every-change with periodic + debounced syncs; ensure new household devices receive the full pantry state.
+
+### What was done
+
+**Feature 1: Configurable periodic sync interval**
+
+- Changed the periodic sync default from 15 minutes to 30 minutes.
+- Made the interval user-configurable via a new `sync_interval_minutes` `ListPreference` (options: 15 / 30 / 60 / 120 / 240 minutes; default 30).
+- `SyncWorkerScheduler.schedulePeriodicSync(Context)` now reads the `sync_interval_minutes` SharedPreferences key and passes it to `PeriodicWorkRequest.Builder`. Policy changed from `KEEP` to `UPDATE` so changing the preference immediately takes effect on the next reschedule.
+- `SettingsFragment.onSharedPreferenceChanged()` handles `sync_interval_minutes` and calls `schedulePeriodicSync` when either sync mode is active.
+
+**Feature 2: Debounced change-triggered sync**
+
+- Added `SyncWorkerScheduler.triggerDebouncedSync(Context)` — identical to `triggerManualSync` but with a 2-minute `setInitialDelay`. Combined with `ExistingWorkPolicy.REPLACE`, a burst of rapid inserts (e.g. scanning a full grocery shop) coalesces into a single sync that fires 2 minutes after the *last* change.
+- `Repository.java` now calls `triggerDebouncedSync` (was `triggerManualSync`) after all product mutations.
+- `SyncWorkerScheduler.triggerManualSync(Context)` remains as-is (no delay) for the explicit "Sync now" button in Settings.
+
+**Feature 3: Full database bootstrap backfill**
+
+- Added `AppDatabase.backfillSyncChangesFromTables(SupportSQLiteDatabase)` — uses four `INSERT OR IGNORE INTO sync_changes … SELECT … FROM <table>` statements with `json_object()` to create synthetic UPSERT entries (clock=1) for any rows not yet tracked in `sync_changes`.
+- Called synchronously from `RoomDatabase.Callback.onOpen()` immediately after `createSyncTablesAndTriggers()`.
+- This ensures that devices with products added before sync was set up will have those products in `sync_changes`, so `exportChanges(0)` always returns the full pantry state. Clock=1 is the lowest possible value, so these backfill entries correctly lose any LWW conflict against a real later change.
+
+### Files changed
+
+- `app/src/main/java/eu/frigo/dispensa/work/SyncWorkerScheduler.java` — configurable interval, debounced `triggerDebouncedSync`, immediate `triggerManualSync`; added `PREF_SYNC_INTERVAL_MINUTES`, `SYNC_INTERVAL_DEFAULT_MINUTES`, `SYNC_INTERVAL_MIN_MINUTES`, `SYNC_DEBOUNCE_DELAY_MINUTES` constants
+- `app/src/main/java/eu/frigo/dispensa/data/AppDatabase.java` — added `backfillSyncChangesFromTables()`; called from `onOpen()`
+- `app/src/main/java/eu/frigo/dispensa/data/Repository.java` — calls `triggerDebouncedSync` instead of `triggerManualSync`
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — `KEY_SYNC_INTERVAL_MINUTES` constant; handles `sync_interval_minutes` pref change
+- `app/src/main/res/xml/preferences.xml` — added `sync_interval_minutes` `ListPreference`
+- `app/src/main/res/values/strings.xml` — 6 new strings (interval title/summary + 5 option labels)
+- `app/src/main/res/values-it/strings.xml` — Italian translations of the 6 new strings
+- `app/src/main/res/values/arrays.xml` — `sync_interval_entries` / `sync_interval_values` arrays
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 21
+
+- The user plans to test local sync today/tomorrow. If issues arise they will share debug logs.
+- The three main sync improvements are complete:
+  1. Periodic background sync (user-configurable 15–240 min, default 30 min)
+  2. Debounced change-triggered sync (2-min delay, coalesces grocery-shop bursts)
+  3. Bootstrap backfill guarantees new household devices receive all items including pre-sync ones
+- Pending/watch for: user testing results; any reported sync issues should be investigated with the existing debug log tooling.
