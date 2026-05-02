@@ -1593,6 +1593,8 @@ _(Continuation of Session 18 / 18.1)_
 
 ## Session 19 — Fresh-Install sync_changes Missing Table
 
+> **Sub-sessions:** [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix)
+
 **Date:** 2026-04-30
 **Goal:** Diagnose and fix the root cause of Drive sync silently failing for users with a fresh install (no data ever uploaded to Drive despite the scheduler running correctly).
 
@@ -1640,8 +1642,6 @@ _(Updated by Session 19.1: `createSyncTablesAndTriggers` is now also called from
 
 ## Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)
 
-> **Sub-sessions:** [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix)
-
 **Date:** 2026-05-02  
 **Goal:** Fix `SQLiteException: no such table: sync_changes` on devices whose database was already at v10 before Session 19's `onCreate` fix was deployed.
 
@@ -1666,3 +1666,4 @@ Added `createSyncTablesAndTriggers(db)` as the first synchronous statement in `R
 
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
 - `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+- Verified logic: `onOpen` receives the live `SupportSQLiteDatabase` handle; all 14 DDL statements use `CREATE TABLE IF NOT EXISTS` / `CREATE TRIGGER IF NOT EXISTS`, so on a database that already has the tables the calls are instant no-ops. On an affected device (v10 DB, no sync tables) the next app launch will execute `onOpen`, create `sync_changes` and all 12 triggers, and the subsequent `SyncWorker` run will find the table and successfully call `exportChanges`.
