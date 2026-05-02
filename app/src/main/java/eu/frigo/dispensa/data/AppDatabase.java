@@ -284,6 +284,10 @@ public abstract class AppDatabase extends RoomDatabase {
                     @Override
                     public void onOpen(@NonNull SupportSQLiteDatabase db) {
                         super.onOpen(db);
+                        // Ensure sync tables and triggers exist on every open.
+                        // This covers the case where the database was already at v10 before
+                        // the onCreate fix was deployed (onCreate only fires on first creation).
+                        createSyncTablesAndTriggers(db);
                         Executors.newSingleThreadExecutor().execute(() -> {
                             Log.d("AppDatabase", "Database onOpen - Verifica/Aggiornamento StorageLocations predefinite");
                             StorageLocationDao dao = INSTANCE.storageLocationDao();
