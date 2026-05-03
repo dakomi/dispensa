@@ -257,9 +257,9 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
         setLocalSectionVisible(!collapsed);
 
         toggle.setOnPreferenceClickListener(pref -> {
-            SharedPreferences p = PreferenceManager.getDefaultSharedPreferences(requireContext());
-            boolean nowCollapsed = !p.getBoolean(PREF_LOCAL_SECTION_COLLAPSED, false);
-            p.edit().putBoolean(PREF_LOCAL_SECTION_COLLAPSED, nowCollapsed).apply();
+            SharedPreferences prefs2 = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            boolean nowCollapsed = !prefs2.getBoolean(PREF_LOCAL_SECTION_COLLAPSED, false);
+            prefs2.edit().putBoolean(PREF_LOCAL_SECTION_COLLAPSED, nowCollapsed).apply();
             toggle.setTitle(nowCollapsed ? R.string.pref_section_expand : R.string.pref_section_collapse);
             setLocalSectionVisible(!nowCollapsed);
             return true;

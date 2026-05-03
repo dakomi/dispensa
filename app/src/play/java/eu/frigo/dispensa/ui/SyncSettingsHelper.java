@@ -220,10 +220,10 @@ public class SyncSettingsHelper {
 
         // Wire up the Drive section collapse toggle
         driveToggle.setOnPreferenceClickListener(pref -> {
-            SharedPreferences p = PreferenceManager.getDefaultSharedPreferences(
+            SharedPreferences drivePrefs = PreferenceManager.getDefaultSharedPreferences(
                     fragment.requireContext());
-            boolean nowCollapsed = !p.getBoolean(PREF_DRIVE_SECTION_COLLAPSED, false);
-            p.edit().putBoolean(PREF_DRIVE_SECTION_COLLAPSED, nowCollapsed).apply();
+            boolean nowCollapsed = !drivePrefs.getBoolean(PREF_DRIVE_SECTION_COLLAPSED, false);
+            drivePrefs.edit().putBoolean(PREF_DRIVE_SECTION_COLLAPSED, nowCollapsed).apply();
             driveToggle.setTitle(nowCollapsed
                     ? R.string.pref_section_expand : R.string.pref_section_collapse);
             if (nowCollapsed) {
