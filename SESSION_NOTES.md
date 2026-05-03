@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1790-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1820-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~37–117)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~118–174)*
@@ -34,7 +34,8 @@
 - [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)* ↳ has sub-sessions
   - [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix) *(~1638–1680)*
 - [Session 20 — Periodic Sync Interval + Bootstrap Backfill](#session-20--periodic-sync-interval--bootstrap-backfill) *(~1682–1730)*
-- [Session 21 — Settings UI Reorganization (Collapsible Sync Groups)](#session-21--settings-ui-reorganization-collapsible-sync-groups) *(~1732–1790)*
+- [Session 21 — Settings UI Reorganization (Collapsible Sync Groups)](#session-21--settings-ui-reorganization-collapsible-sync-groups) *(~1732–1790)* ↳ has sub-sessions
+  - [Session 21.1 — Fix play flavour build: missing SharedPreferences import](#session-211--fix-play-flavour-build-missing-sharedpreferences-import) *(~1762–1790)*
 
 ---
 
@@ -1758,3 +1759,30 @@ Added `createSyncTablesAndTriggers(db)` as the first synchronous statement in `R
 - The collapsible sections use a plain `Preference` as the toggle (always visible inside the category). Clicking it toggles visibility of its siblings and persists collapse state in SharedPreferences.
 - The Drive section toggle is added programmatically in `SyncSettingsHelper.setup()`; it is always the first child of `pref_cat_sync_drive`.
 - `refreshSignInState()` skips all updates when the Drive section is collapsed; it is re-invoked naturally when the section is expanded (via the toggle's click listener).
+
+---
+
+## Session 21.1 — Fix play flavour build: missing SharedPreferences import
+
+**Date:** 2026-05-03  
+**Goal:** Restore the play flavour to a compilable state after Session 21 introduced a `SharedPreferences` usage without the corresponding import.
+
+### What was done
+
+- Ran `./gradlew :app:compilePlayDebugJavaWithJavac` and identified two "cannot find symbol: class SharedPreferences" errors at lines 130 and 223 of `SyncSettingsHelper.java` (play). Both usages (`PreferenceManager.getDefaultSharedPreferences(...)` return value) required the `android.content.SharedPreferences` import that was absent.
+- Added `import android.content.SharedPreferences;` to the play-flavor `SyncSettingsHelper.java`.
+- Added a ⚠️ **Build & test reminder** callout to the top of `PLAN.md` instructing agents to always build and test **all affected flavours** (not just `fdroid`) after code changes.
+- Verified: `./gradlew :app:compilePlayDebugJavaWithJavac` → **BUILD SUCCESSFUL**.
+
+### Files changed
+
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — added missing `import android.content.SharedPreferences`
+- `PLAN.md` — added build-flavour reminder note near the top
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compilePlayDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+
+### Handoff to Session 22
+
+_(Updated by Session 21.1: play build is now passing. All other handoff notes from Session 21 remain valid.)_

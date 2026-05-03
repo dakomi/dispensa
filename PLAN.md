@@ -1,5 +1,7 @@
 # PLAN.md — Dispensa App: Integrated CRDT Sync
 
+> ⚠️ **Build & test reminder:** Always build and run tests for **all affected flavours** after making code changes — not just `fdroid`. Use `./gradlew :app:compilePlayDebugJavaWithJavac` for the `play` flavour and `./gradlew :app:compileFdroidDebugJavaWithJavac` for `fdroid`. Run unit tests with `./gradlew testPlayDebugUnitTest` / `./gradlew testFdroidDebugUnitTest` as appropriate.
+
 ## Project Overview
 
 **Dispensa** is an Android pantry management application (issue [#25](https://github.com/enricofrigo/dispensa/issues/25)). This plan implements **integrated CRDT-based sync** between devices using **SQLite triggers + a change log**, retaining the standard Android SQLite database (no external CRDT library required) while keeping upstream divergence minimal.
