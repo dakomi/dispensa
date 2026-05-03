@@ -69,6 +69,17 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
     private static final String KEY_DEBUG_EXPORT_LOG = "pref_debug_export_log";
     private static final String KEY_DEBUG_CLEAR_LOG = "pref_debug_clear_log";
 
+    private static final String KEY_SYNC_LOCAL_TOGGLE = "pref_sync_local_toggle";
+    private static final String PREF_LOCAL_SECTION_COLLAPSED = "pref_sync_local_section_collapsed";
+
+    /** Keys of the preferences that are collapsed/expanded within the local sync section. */
+    private static final String[] LOCAL_SYNC_CHILD_KEYS = {
+        SyncWorker.PREF_SYNC_LOCAL_NETWORK_ENABLED,
+        "sync_local_peers_status",
+        "sync_local_scan_peers",
+        "sync_manage_devices"
+    };
+
     /**
      * Fragment argument key that carries a household folder ID from a deep-link Intent.
      * If present, the join-household dialog is automatically shown after setup.
@@ -196,6 +207,9 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
             });
         }
 
+        // Wire up the collapsible local-sync section toggle
+        setupLocalCollapseToggle();
+
         // Inject play-flavor Drive preferences (no-op in fdroid flavor)
         SyncSettingsHelper.setup(this);
         SyncSettingsHelper.setDriveAuthLauncher(this, googleDriveAuthLauncher);
@@ -226,6 +240,37 @@ public class SettingsFragment extends PreferenceFragmentCompat implements Shared
                         android.widget.Toast.LENGTH_SHORT).show();
                 return true;
             });
+        }
+    }
+
+    /**
+     * Wires the local-sync section collapse/expand toggle and restores the last-known
+     * collapsed state from SharedPreferences.
+     */
+    private void setupLocalCollapseToggle() {
+        Preference toggle = findPreference(KEY_SYNC_LOCAL_TOGGLE);
+        if (toggle == null) return;
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        boolean collapsed = prefs.getBoolean(PREF_LOCAL_SECTION_COLLAPSED, false);
+        toggle.setTitle(collapsed ? R.string.pref_section_expand : R.string.pref_section_collapse);
+        setLocalSectionVisible(!collapsed);
+
+        toggle.setOnPreferenceClickListener(pref -> {
+            SharedPreferences p = PreferenceManager.getDefaultSharedPreferences(requireContext());
+            boolean nowCollapsed = !p.getBoolean(PREF_LOCAL_SECTION_COLLAPSED, false);
+            p.edit().putBoolean(PREF_LOCAL_SECTION_COLLAPSED, nowCollapsed).apply();
+            toggle.setTitle(nowCollapsed ? R.string.pref_section_expand : R.string.pref_section_collapse);
+            setLocalSectionVisible(!nowCollapsed);
+            return true;
+        });
+    }
+
+    /** Shows or hides the content preferences inside the local-sync collapsible section. */
+    private void setLocalSectionVisible(boolean visible) {
+        for (String key : LOCAL_SYNC_CHILD_KEYS) {
+            Preference p = findPreference(key);
+            if (p != null) p.setVisible(visible);
         }
     }
 

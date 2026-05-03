@@ -102,17 +102,11 @@
 
     </PreferenceCategory>
 
+    <!-- Shared sync settings: always visible -->
     <PreferenceCategory
-        app:key="pref_cat_sync"
+        app:key="pref_cat_sync_shared"
         app:title="@string/pref_cat_sync_title"
         app:iconSpaceReserved="false">
-
-        <CheckBoxPreference
-            app:key="sync_local_network_enabled"
-            app:title="@string/pref_sync_local_network_title"
-            app:summary="@string/pref_sync_local_network_summary"
-            app:defaultValue="false"
-            app:iconSpaceReserved="false"/>
 
         <ListPreference
             app:key="sync_interval_minutes"
@@ -135,6 +129,27 @@
             app:summary="@string/pref_sync_trigger_manual_summary"
             app:iconSpaceReserved="false"/>
 
+    </PreferenceCategory>
+
+    <!-- Local network sync: collapsible -->
+    <PreferenceCategory
+        app:key="pref_cat_sync_local"
+        app:title="@string/pref_cat_sync_local_title"
+        app:iconSpaceReserved="false">
+
+        <!-- Toggle shown at the top; click collapses/expands the section -->
+        <Preference
+            app:key="pref_sync_local_toggle"
+            app:title="@string/pref_section_collapse"
+            app:iconSpaceReserved="false"/>
+
+        <CheckBoxPreference
+            app:key="sync_local_network_enabled"
+            app:title="@string/pref_sync_local_network_title"
+            app:summary="@string/pref_sync_local_network_summary"
+            app:defaultValue="false"
+            app:iconSpaceReserved="false"/>
+
         <Preference
             app:key="sync_local_peers_status"
             app:title="@string/pref_sync_local_peers_status_title"
@@ -154,6 +169,14 @@
             app:iconSpaceReserved="false"/>
 
     </PreferenceCategory>
+
+    <!-- Google Drive sync: collapsible; preferences are injected at runtime by
+         SyncSettingsHelper (play flavor). F-Droid flavor leaves this empty. -->
+    <PreferenceCategory
+        app:key="pref_cat_sync_drive"
+        app:title="@string/pref_cat_sync_drive_section_title"
+        app:iconSpaceReserved="false"/>
+
 
     <PreferenceCategory
         app:key="pref_cat_debug"
