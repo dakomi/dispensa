@@ -90,29 +90,53 @@ public class SyncSettingsHelper {
     static final String KEY_JOIN_HOUSEHOLD = "sync_drive_join_household";
     static final String KEY_LEAVE_HOUSEHOLD = "sync_drive_leave_household";
 
+    /** Key of the Drive section collapse/expand toggle preference. */
+    private static final String KEY_DRIVE_TOGGLE = "pref_sync_drive_toggle";
+
+    /** SharedPreferences key that persists the Drive section collapsed state. */
+    static final String PREF_DRIVE_SECTION_COLLAPSED = "pref_sync_drive_section_collapsed";
+
+    /** Keys of the Drive content preferences controlled by the collapse toggle. */
+    private static final String[] DRIVE_SECTION_CHILD_KEYS = {
+        DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED,
+        KEY_SIGN_IN, KEY_ACCOUNT, KEY_SIGN_OUT,
+        KEY_TEST_CONNECTION,
+        KEY_HOUSEHOLD_STATUS, KEY_CREATE_HOUSEHOLD, KEY_JOIN_HOUSEHOLD, KEY_LEAVE_HOUSEHOLD
+    };
+
     private SyncSettingsHelper() {}
 
     // ── Setup ─────────────────────────────────────────────────────────────────
 
     /**
-     * Inflates Drive-specific preferences into the {@code pref_cat_sync} category and
-     * sets up sign-out handling. Also updates sign-in/sign-out visibility to match the
-     * current authentication state.
+     * Inflates Drive-specific preferences into the {@code pref_cat_sync_drive} category,
+     * adds a collapse/expand toggle, and wires up sign-out handling.
+     * Also updates sign-in/sign-out visibility to match the current authentication state.
      */
     public static void setup(PreferenceFragmentCompat fragment) {
         Context context = fragment.requireContext();
 
-        androidx.preference.PreferenceCategory syncCategory =
-                fragment.findPreference("pref_cat_sync");
-        if (syncCategory == null) {
-            Log.w(TAG, "pref_cat_sync not found — Drive prefs not added.");
+        androidx.preference.PreferenceCategory driveCategory =
+                fragment.findPreference("pref_cat_sync_drive");
+        if (driveCategory == null) {
+            Log.w(TAG, "pref_cat_sync_drive not found — Drive prefs not added.");
             return;
         }
+
+        // Add the collapse/expand toggle as the first item in the Drive category
+        Preference driveToggle = new Preference(context);
+        driveToggle.setKey(KEY_DRIVE_TOGGLE);
+        driveToggle.setIconSpaceReserved(false);
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        boolean collapsed = prefs.getBoolean(PREF_DRIVE_SECTION_COLLAPSED, false);
+        driveToggle.setTitle(collapsed
+                ? R.string.pref_section_expand : R.string.pref_section_collapse);
+        driveCategory.addPreference(driveToggle);
 
         // Inflate Drive prefs from the play-flavor XML resource
         fragment.addPreferencesFromResource(R.xml.preferences_sync_drive);
 
-        // Move inflated prefs from the root screen into the sync category
+        // Move inflated prefs from the root screen into the Drive category
         PreferenceScreen rootScreen = fragment.getPreferenceScreen();
         Preference driveEnabled = rootScreen.findPreference(DriveTransportFactory.PREF_SYNC_DRIVE_ENABLED);
         Preference signInPref   = rootScreen.findPreference(KEY_SIGN_IN);
@@ -121,19 +145,19 @@ public class SyncSettingsHelper {
 
         if (driveEnabled != null) {
             rootScreen.removePreference(driveEnabled);
-            syncCategory.addPreference(driveEnabled);
+            driveCategory.addPreference(driveEnabled);
         }
         if (signInPref != null) {
             rootScreen.removePreference(signInPref);
-            syncCategory.addPreference(signInPref);
+            driveCategory.addPreference(signInPref);
         }
         if (accountPref != null) {
             rootScreen.removePreference(accountPref);
-            syncCategory.addPreference(accountPref);
+            driveCategory.addPreference(accountPref);
         }
         if (signOutPref != null) {
             rootScreen.removePreference(signOutPref);
-            syncCategory.addPreference(signOutPref);
+            driveCategory.addPreference(signOutPref);
             signOutPref.setOnPreferenceClickListener(pref -> {
                 signOut(context, driveEnabled, accountPref, signInPref, signOutPref);
                 return true;
@@ -143,7 +167,7 @@ public class SyncSettingsHelper {
         Preference testConnectionPref = rootScreen.findPreference(KEY_TEST_CONNECTION);
         if (testConnectionPref != null) {
             rootScreen.removePreference(testConnectionPref);
-            syncCategory.addPreference(testConnectionPref);
+            driveCategory.addPreference(testConnectionPref);
             testConnectionPref.setOnPreferenceClickListener(pref -> {
                 testDriveConnection(context);
                 return true;
@@ -153,7 +177,7 @@ public class SyncSettingsHelper {
         Preference householdStatusPref = rootScreen.findPreference(KEY_HOUSEHOLD_STATUS);
         if (householdStatusPref != null) {
             rootScreen.removePreference(householdStatusPref);
-            syncCategory.addPreference(householdStatusPref);
+            driveCategory.addPreference(householdStatusPref);
             householdStatusPref.setOnPreferenceClickListener(pref -> {
                 String folderId = HouseholdManager.getHouseholdFolderId(fragment.requireContext());
                 if (folderId != null) {
@@ -167,7 +191,7 @@ public class SyncSettingsHelper {
         Preference createHouseholdPref = rootScreen.findPreference(KEY_CREATE_HOUSEHOLD);
         if (createHouseholdPref != null) {
             rootScreen.removePreference(createHouseholdPref);
-            syncCategory.addPreference(createHouseholdPref);
+            driveCategory.addPreference(createHouseholdPref);
             createHouseholdPref.setOnPreferenceClickListener(pref -> {
                 showCreateHouseholdDialog(fragment);
                 return true;
@@ -177,7 +201,7 @@ public class SyncSettingsHelper {
         Preference joinHouseholdPref = rootScreen.findPreference(KEY_JOIN_HOUSEHOLD);
         if (joinHouseholdPref != null) {
             rootScreen.removePreference(joinHouseholdPref);
-            syncCategory.addPreference(joinHouseholdPref);
+            driveCategory.addPreference(joinHouseholdPref);
             joinHouseholdPref.setOnPreferenceClickListener(pref -> {
                 showJoinHouseholdDialog(fragment);
                 return true;
@@ -187,15 +211,36 @@ public class SyncSettingsHelper {
         Preference leaveHouseholdPref = rootScreen.findPreference(KEY_LEAVE_HOUSEHOLD);
         if (leaveHouseholdPref != null) {
             rootScreen.removePreference(leaveHouseholdPref);
-            syncCategory.addPreference(leaveHouseholdPref);
+            driveCategory.addPreference(leaveHouseholdPref);
             leaveHouseholdPref.setOnPreferenceClickListener(pref -> {
                 leaveHousehold(context, fragment);
                 return true;
             });
         }
 
-        // Initialise visibility based on current sign-in and household state
-        refreshSignInState(fragment);
+        // Wire up the Drive section collapse toggle
+        driveToggle.setOnPreferenceClickListener(pref -> {
+            SharedPreferences drivePrefs = PreferenceManager.getDefaultSharedPreferences(
+                    fragment.requireContext());
+            boolean nowCollapsed = !drivePrefs.getBoolean(PREF_DRIVE_SECTION_COLLAPSED, false);
+            drivePrefs.edit().putBoolean(PREF_DRIVE_SECTION_COLLAPSED, nowCollapsed).apply();
+            driveToggle.setTitle(nowCollapsed
+                    ? R.string.pref_section_expand : R.string.pref_section_collapse);
+            if (nowCollapsed) {
+                setDriveSectionChildrenVisible(fragment, false);
+            } else {
+                // When expanding, let refreshSignInState() restore proper per-pref visibility
+                refreshSignInState(fragment);
+            }
+            return true;
+        });
+
+        // Initialise visibility: apply collapse state first, then sign-in state
+        if (collapsed) {
+            setDriveSectionChildrenVisible(fragment, false);
+        } else {
+            refreshSignInState(fragment);
+        }
     }
 
     // ── Drive auth launcher ───────────────────────────────────────────────────
@@ -283,9 +328,16 @@ public class SyncSettingsHelper {
     /**
      * Updates the visibility of sign-in, account, and sign-out preferences to match the
      * current sign-in state (read from SharedPreferences).
+     * <p>No-op if the Drive section is currently collapsed.</p>
      */
     static void refreshSignInState(PreferenceFragmentCompat fragment) {
         Context context = fragment.requireContext();
+
+        // Do not change child visibility while the section is collapsed
+        boolean collapsed = PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(PREF_DRIVE_SECTION_COLLAPSED, false);
+        if (collapsed) return;
+
         String email = PreferenceManager
                 .getDefaultSharedPreferences(context)
                 .getString(DriveTransportFactory.PREF_SIGNED_IN_EMAIL, null);
@@ -332,6 +384,18 @@ public class SyncSettingsHelper {
         if (createHouseholdPref != null) createHouseholdPref.setVisible(signedIn && !inHousehold);
         if (joinHouseholdPref   != null) joinHouseholdPref.setVisible(signedIn && !inHousehold);
         if (leaveHouseholdPref  != null) leaveHouseholdPref.setVisible(inHousehold);
+    }
+
+    /**
+     * Shows or hides all Drive section content preferences (i.e. all children except the
+     * collapse/expand toggle itself).
+     */
+    private static void setDriveSectionChildrenVisible(PreferenceFragmentCompat fragment,
+            boolean visible) {
+        for (String key : DRIVE_SECTION_CHILD_KEYS) {
+            Preference p = fragment.findPreference(key);
+            if (p != null) p.setVisible(visible);
+        }
     }
 
     /**

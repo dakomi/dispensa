@@ -418,3 +418,22 @@ NsdManager + TCP sockets    Drive REST API v3 (appDataFolder)
 - [x] Add string resources and arrays for sync interval options (EN + IT)
 
 **Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.
+
+---
+
+### Session 21 — Settings UI Reorganization (Collapsible Sync Groups) ✅
+
+**Goal:** Reorganize the cluttered sync settings section into three clearly-grouped, collapsible sections.
+
+- [x] Split `pref_cat_sync` into three `PreferenceCategory` blocks in `preferences.xml`:
+  - `pref_cat_sync_shared` ("Sync") — shared settings (interval, last sync, sync now); always expanded
+  - `pref_cat_sync_local` ("Local Network Sync") — local sync prefs with ▼/▶ collapse toggle
+  - `pref_cat_sync_drive` ("Google Drive") — empty; Drive prefs injected at runtime by SyncSettingsHelper
+- [x] Add collapse/expand `Preference` toggle (`pref_sync_local_toggle`) as first item of local section
+- [x] Add `setupLocalCollapseToggle()` + `setLocalSectionVisible()` helpers in `SettingsFragment`; state persisted in SharedPreferences (`pref_sync_local_section_collapsed`)
+- [x] Update `SyncSettingsHelper.setup()` (play) to inject into `pref_cat_sync_drive` (not `pref_cat_sync`); add `pref_sync_drive_toggle` programmatically as first item; state persisted (`pref_sync_drive_section_collapsed`)
+- [x] Update `refreshSignInState()` (play) to no-op when Drive section is collapsed
+- [x] Add `setDriveSectionChildrenVisible()` helper in `SyncSettingsHelper` (play)
+- [x] Add new string resources: `pref_cat_sync_local_title`, `pref_cat_sync_drive_section_title`, `pref_section_collapse`, `pref_section_expand` (EN + IT)
+
+**Tests:** BUILD SUCCESSFUL; all 26 unit tests pass.

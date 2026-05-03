@@ -214,6 +214,10 @@
 
     <!-- Sync Settings -->
     <string name="pref_cat_sync_title">Sync</string>
+    <string name="pref_cat_sync_local_title">Local Network Sync</string>
+    <string name="pref_cat_sync_drive_section_title">Google Drive</string>
+    <string name="pref_section_collapse">▼ Collapse</string>
+    <string name="pref_section_expand">▶ Expand</string>
     <string name="pref_sync_local_network_title">Local network sync</string>
     <string name="pref_sync_local_network_summary">Automatically sync with other devices on the same Wi-Fi network</string>
     <string name="pref_sync_interval_title">Sync interval</string>

@@ -4,7 +4,7 @@
 
 ## Table of Contents
 
-> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1730-line file. Ranges shift slightly if the ToC grows.
+> **Agent navigation:** Approximate line ranges are provided for efficient `view_range` lookups in this ~1790-line file. Ranges shift slightly if the ToC grows.
 
 - [Session 1 — Bootstrap & Planning](#session-1--bootstrap--planning) *(~37–117)*
 - [Session 2 — Dependencies & Database Migration](#session-2--dependencies--database-migration) *(~118–174)*
@@ -34,6 +34,7 @@
 - [Session 19 — Fresh-Install sync_changes Missing Table](#session-19--fresh-install-sync_changes-missing-table) *(~1601–1650)* ↳ has sub-sessions
   - [Session 19.1 — Existing-DB sync_changes Missing Table (onOpen fix)](#session-191--existing-db-sync_changes-missing-table-onopen-fix) *(~1638–1680)*
 - [Session 20 — Periodic Sync Interval + Bootstrap Backfill](#session-20--periodic-sync-interval--bootstrap-backfill) *(~1682–1730)*
+- [Session 21 — Settings UI Reorganization (Collapsible Sync Groups)](#session-21--settings-ui-reorganization-collapsible-sync-groups) *(~1732–1790)*
 
 ---
 
@@ -1719,3 +1720,41 @@ Added `createSyncTablesAndTriggers(db)` as the first synchronous statement in `R
   2. Debounced change-triggered sync (2-min delay, coalesces grocery-shop bursts)
   3. Bootstrap backfill guarantees new household devices receive all items including pre-sync ones
 - Pending/watch for: user testing results; any reported sync issues should be investigated with the existing debug log tooling.
+
+---
+
+## Session 21 — Settings UI Reorganization (Collapsible Sync Groups)
+
+**Date:** 2026-05-03
+**Goal:** Reorganize the cluttered sync settings into three clearly-grouped, collapsible sections and answer a question about the Google Drive file structure.
+
+### What was done
+
+- **Q&A: Drive file structure** — Confirmed that keeping bootstrap changes and incremental changes in the same Drive file is the correct design. `SyncWorker` already calls `exportChanges(0L)` (full log) for Drive, so the file always contains a complete snapshot. Splitting into two files would add complexity with no benefit.
+- **Settings reorganization:** Split the single `pref_cat_sync` into three `PreferenceCategory` blocks:
+  - `pref_cat_sync_shared` ("Sync") — shared settings (sync interval, last sync timestamp, sync now); always visible, no toggle.
+  - `pref_cat_sync_local` ("Local Network Sync") — local sync preferences; a ▼/▶ toggle preference is the first child; expanded by default; state persisted in SharedPreferences key `pref_sync_local_section_collapsed`.
+  - `pref_cat_sync_drive` ("Google Drive") — defined empty in XML; Drive preferences injected programmatically by `SyncSettingsHelper` (play flavor); a ▼/▶ toggle is added as the first item in `setup()`; state persisted in `pref_sync_drive_section_collapsed`.
+- **F-Droid flavor:** unaffected; the no-op `SyncSettingsHelper` and the new `pref_cat_sync_drive` category simply remains empty.
+- **`refreshSignInState()` (play):** now returns early when the Drive section is collapsed, preventing any child-visibility updates that would fight the collapsed state.
+- **New strings (EN + IT):** `pref_cat_sync_local_title`, `pref_cat_sync_drive_section_title`, `pref_section_collapse` ("▼ Collapse"), `pref_section_expand` ("▶ Expand").
+
+### Files changed
+
+- `app/src/main/res/xml/preferences.xml` — restructured sync section into three categories
+- `app/src/main/java/eu/frigo/dispensa/ui/SettingsFragment.java` — added `KEY_SYNC_LOCAL_TOGGLE`, `PREF_LOCAL_SECTION_COLLAPSED`, `LOCAL_SYNC_CHILD_KEYS`, `setupLocalCollapseToggle()`, `setLocalSectionVisible()`
+- `app/src/play/java/eu/frigo/dispensa/ui/SyncSettingsHelper.java` — inject into `pref_cat_sync_drive`; add Drive toggle; `setDriveSectionChildrenVisible()`; `refreshSignInState()` respects collapsed state
+- `app/src/main/res/values/strings.xml` — 4 new strings
+- `app/src/main/res/values-it/strings.xml` — 4 new Italian strings
+
+### Test results
+
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew :app:compileFdroidDebugJavaWithJavac` — **BUILD SUCCESSFUL**
+- `JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64 ./gradlew testFdroidDebugUnitTest` — **BUILD SUCCESSFUL**, all 26 tests pass
+
+### Handoff to Session 22
+
+- Local sync testing is next on the user's agenda. If issues arise they will share debug logs.
+- The collapsible sections use a plain `Preference` as the toggle (always visible inside the category). Clicking it toggles visibility of its siblings and persists collapse state in SharedPreferences.
+- The Drive section toggle is added programmatically in `SyncSettingsHelper.setup()`; it is always the first child of `pref_cat_sync_drive`.
+- `refreshSignInState()` skips all updates when the Drive section is collapsed; it is re-invoked naturally when the section is expanded (via the toggle's click listener).
